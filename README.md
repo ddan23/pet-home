@@ -316,4 +316,4 @@ REST 接口统一前缀 `/petHome/api`（兼容 `/api/v1` 别名），下表为�
 
 ## License
 
-仓库当前未附带独立 `LICENSE` 文件。对外开源、分发或商用前，需要补充明确的许可证并确认第三方依赖与素材的授权范围（其中 PDF 字体 Ma Shan Zheng 采用 OFL 授权，见 `backend/src/main/resources/fonts/OFL.txt`）。
+本项目基于 [MIT License](LICENSE) 开源发布。第三方素材授权说明：PDF 健康报告字体 Ma Shan Zheng 采用 SIL OFL 授权，见 `backend/src/main/resources/fonts/OFL.txt`；上传至公开仓库前请自行确认演示数据中不包含隐私信息。
