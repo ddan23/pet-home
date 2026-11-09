@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.PetVaccinationMapper">
+    <select id="selectByPetId" resultType="com.hnist.entity.PetVaccination">
+        SELECT id, pet_id, vaccine_name, vaccinated_on, next_due_on, batch_no, vet_name, created_at FROM pet_vaccinations
+        WHERE pet_id = #{petId}
+        ORDER BY vaccinated_on ASC, id ASC
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO pet_vaccinations (
+            pet_id, vaccine_name, vaccinated_on, next_due_on, batch_no, vet_name
+        ) VALUES (
+            #{petId}, #{vaccineName}, #{vaccinatedOn}, #{nextDueOn}, #{batchNo}, #{vetName}
+        )
+    </insert>
+
+    <delete id="deleteByPetId">
+        DELETE FROM pet_vaccinations WHERE pet_id = #{petId}
+    </delete>
+</mapper>

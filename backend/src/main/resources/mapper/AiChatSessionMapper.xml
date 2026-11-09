@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.AiChatSessionMapper">
+    <resultMap id="sessionMap" type="com.hnist.entity.AiChatSession">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="petId" column="pet_id"/>
+        <result property="mode" column="mode"/>
+        <result property="lastMessageAt" column="last_message_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectByOwnerAndMode" resultMap="sessionMap">
+        SELECT id, user_id, pet_id, mode, last_message_at, created_at, updated_at
+        FROM ai_chat_sessions
+        WHERE user_id = #{userId}
+          AND pet_id = #{petId}
+          AND mode = #{mode}
+        LIMIT 1
+    </select>
+
+    <select id="selectByIdAndUserId" resultMap="sessionMap">
+        SELECT id, user_id, pet_id, mode, last_message_at, created_at, updated_at
+        FROM ai_chat_sessions
+        WHERE id = #{id}
+          AND user_id = #{userId}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ai_chat_sessions (user_id, pet_id, mode)
+        VALUES (#{userId}, #{petId}, #{mode})
+    </insert>
+
+    <update id="touch">
+        UPDATE ai_chat_sessions
+        SET last_message_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteByIdAndUserId">
+        DELETE FROM ai_chat_sessions
+        WHERE id = #{id}
+          AND user_id = #{userId}
+    </delete>
+</mapper>

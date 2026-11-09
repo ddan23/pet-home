@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.OrderMapper">
+
+    <resultMap id="orderMap" type="com.hnist.entity.Order">
+        <id property="id" column="id"/>
+        <result property="orderNo" column="order_no"/>
+        <result property="userId" column="user_id"/>
+        <result property="shopId" column="shop_id"/>
+        <result property="orderType" column="order_type"/>
+        <result property="totalAmount" column="total_amount"/>
+        <result property="status" column="status"/>
+        <result property="appointmentTime" column="appointment_time"/>
+        <result property="appointmentEndTime" column="appointment_end_time"/>
+        <result property="appointmentDuration" column="appointment_duration"/>
+        <result property="appointmentPetName" column="appointment_pet_name"/>
+        <result property="shippingAddress" column="shipping_address"/>
+        <result property="items" column="items"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="shopName" column="shop_name"/>
+        <result property="shopAddress" column="shop_address"/>
+        <result property="userName" column="user_name"/>
+    </resultMap>
+
+    <!-- 用户端查订单 -->
+    <select id="selectByUserId" resultMap="orderMap">
+        SELECT o.*, s.name AS shop_name, s.address AS shop_address
+        FROM orders AS o
+        LEFT JOIN shops AS s ON o.shop_id = s.id
+        WHERE o.user_id = #{userId}
+        <if test="status != null and status != ''">
+            AND o.status = #{status}
+        </if>
+        <if test="orderType != null and orderType != ''">
+            AND o.order_type = #{orderType}
+        </if>
+        ORDER BY o.created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countByUserId" resultType="int">
+        SELECT COUNT(*) FROM orders
+        WHERE user_id = #{userId}
+        <if test="status != null and status != ''">
+            AND status = #{status}
+        </if>
+        <if test="orderType != null and orderType != ''">
+            AND order_type = #{orderType}
+        </if>
+    </select>
+
+    <!-- 商家端查订单 -->
+    <select id="selectByShopId" resultMap="orderMap">
+        SELECT o.*, s.name AS shop_name, s.address AS shop_address, u.nickname AS user_name
+        FROM orders AS o
+        LEFT JOIN shops AS s ON o.shop_id = s.id
+        LEFT JOIN users AS u ON o.user_id = u.id
+        WHERE o.shop_id = #{shopId}
+        <if test="status != null and status != ''">
+            AND o.status = #{status}
+        </if>
+        <if test="orderType != null and orderType != ''">
+            AND o.order_type = #{orderType}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (o.order_no LIKE CONCAT(#{keyword}, '%')
+                 OR o.items LIKE CONCAT(#{keyword}, '%'))
+        </if>
+        ORDER BY o.created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countByShopId" resultType="int">
+        SELECT COUNT(*) FROM orders
+        WHERE shop_id = #{shopId}
+        <if test="status != null and status != ''">
+            AND status = #{status}
+        </if>
+        <if test="orderType != null and orderType != ''">
+            AND order_type = #{orderType}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (order_no LIKE CONCAT(#{keyword}, '%')
+                 OR items LIKE CONCAT(#{keyword}, '%'))
+        </if>
+    </select>
+
+    <select id="selectByOwner" resultMap="orderMap">
+        SELECT o.*, s.name AS shop_name, s.address AS shop_address, u.nickname AS user_name
+        FROM orders AS o
+        INNER JOIN shops AS s ON o.shop_id = s.id
+        LEFT JOIN users AS u ON o.user_id = u.id
+        WHERE s.owner_id = #{ownerId}
+        <if test="shopId != null">
+            AND o.shop_id = #{shopId}
+        </if>
+        <if test="userId != null">
+            AND o.user_id = #{userId}
+        </if>
+        <if test="status != null and status != ''">
+            AND o.status = #{status}
+        </if>
+        <if test="orderType != null and orderType != ''">
+            AND o.order_type = #{orderType}
+        </if>
+        ORDER BY o.created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countByOwner" resultType="int">
+        SELECT COUNT(*)
+        FROM orders AS o
+        INNER JOIN shops AS s ON o.shop_id = s.id
+        WHERE s.owner_id = #{ownerId}
+        <if test="shopId != null">
+            AND o.shop_id = #{shopId}
+        </if>
+        <if test="userId != null">
+            AND o.user_id = #{userId}
+        </if>
+        <if test="status != null and status != ''">
+            AND o.status = #{status}
+        </if>
+        <if test="orderType != null and orderType != ''">
+            AND o.order_type = #{orderType}
+        </if>
+    </select>
+
+    <select id="selectById" resultMap="orderMap">
+        SELECT o.*, s.name AS shop_name, s.address AS shop_address, u.nickname AS user_name
+        FROM orders AS o
+        LEFT JOIN shops AS s ON o.shop_id = s.id
+        LEFT JOIN users AS u ON o.user_id = u.id
+        WHERE o.id = #{id}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO orders (order_no, user_id, shop_id, order_type, total_amount, status,
+            appointment_time, appointment_end_time, appointment_duration,
+            appointment_pet_name, shipping_address, items)
+        VALUES (#{orderNo}, #{userId}, #{shopId}, #{orderType}, #{totalAmount}, #{status},
+            #{appointmentTime}, #{appointmentEndTime}, #{appointmentDuration},
+            #{appointmentPetName}, #{shippingAddress}, #{items})
+    </insert>
+
+    <update id="updateStatus">
+        UPDATE orders SET status = #{status} WHERE id = #{id}
+    </update>
+
+    <update id="updateStatusIfCurrent">
+        UPDATE orders
+        SET status = #{status}
+        WHERE id = #{id}
+          AND status = #{expectedStatus}
+    </update>
+
+    <!-- 查询过期的预约订单（所有时段均已结束） -->
+    <select id="selectExpiredBookings" resultMap="orderMap">
+        SELECT o.*, s.name AS shop_name, s.address AS shop_address, u.nickname AS user_name
+        FROM orders AS o
+        LEFT JOIN shops AS s ON o.shop_id = s.id
+        LEFT JOIN users AS u ON o.user_id = u.id
+        WHERE o.order_type = 'booking'
+          AND o.status = 'confirmed'
+          AND COALESCE(o.appointment_end_time, o.appointment_time) &lt; NOW()
+    </select>
+
+    <!-- 休业取消的数据来源：DISTINCT 防止一笔订单占用同天多个时段被重复带出；预约时间已过的订单不参与休业取消 -->
+    <select id="selectConfirmedBookingsForDay" resultMap="orderMap">
+        SELECT DISTINCT o.*
+        FROM orders o
+        INNER JOIN order_appointment_slots oas ON oas.order_id = o.id
+        INNER JOIN appointment_slots s ON s.id = oas.slot_id
+        WHERE s.service_id = #{serviceId}
+          AND s.shop_id = #{shopId}
+          AND s.slot_date = #{slotDate}
+          AND o.order_type = 'booking'
+          AND o.status = 'confirmed'
+          AND o.appointment_time &gt; NOW()
+        ORDER BY o.appointment_time
+    </select>
+
+    <select id="selectStartingBetween" resultMap="orderMap">
+        SELECT o.*, s.name AS shop_name, s.address AS shop_address, u.nickname AS user_name
+        FROM orders AS o
+        LEFT JOIN shops AS s ON o.shop_id = s.id
+        LEFT JOIN users AS u ON o.user_id = u.id
+        WHERE o.order_type = 'booking'
+          AND o.status = 'confirmed'
+          AND o.appointment_time &gt; #{from}
+          AND o.appointment_time &lt;= #{to}
+        ORDER BY o.appointment_time ASC
+    </select>
+
+    <select id="selectExpiredPendingProductOrders" resultMap="orderMap">
+        SELECT o.*, s.name AS shop_name, s.address AS shop_address, u.nickname AS user_name
+        FROM orders AS o
+        LEFT JOIN shops AS s ON o.shop_id = s.id
+        LEFT JOIN users AS u ON o.user_id = u.id
+        WHERE o.order_type = 'product'
+          AND o.status = 'pending_payment'
+          AND o.created_at &lt; #{createdBefore}
+        ORDER BY o.created_at ASC
+    </select>
+
+    <!-- 批量将过期预约订单状态更新为已取消 -->
+    <update id="batchCancelExpiredBookings">
+        UPDATE orders SET status = 'cancelled'
+        WHERE order_type = 'booking'
+          AND status = 'confirmed'
+          AND COALESCE(appointment_end_time, appointment_time) &lt; NOW()
+    </update>
+
+    <select id="getShopRevenue" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(total_amount), 0)
+        FROM orders
+        WHERE shop_id = #{shopId}
+          AND order_type = #{orderType}
+          AND status = 'completed'
+    </select>
+
+    <select id="countShopCompletedOrders" resultType="int">
+        SELECT COUNT(*)
+        FROM orders
+        WHERE shop_id = #{shopId}
+          AND order_type = #{orderType}
+          AND status = 'completed'
+    </select>
+
+    <select id="countOwnerCompletedOrders" resultType="int">
+        SELECT COUNT(*)
+        FROM orders AS o
+        INNER JOIN shops AS s ON o.shop_id = s.id
+        WHERE s.owner_id = #{ownerId}
+          <if test="shopId != null">
+              AND o.shop_id = #{shopId}
+          </if>
+          AND o.order_type = #{orderType}
+          AND o.status = 'completed'
+    </select>
+
+    <select id="getOwnerRevenue" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(o.total_amount), 0)
+        FROM orders AS o
+        INNER JOIN shops AS s ON o.shop_id = s.id
+        WHERE s.owner_id = #{ownerId}
+          AND o.order_type = #{orderType}
+          AND o.status = 'completed'
+        <if test="shopId != null">
+            AND o.shop_id = #{shopId}
+        </if>
+    </select>
+
+</mapper>

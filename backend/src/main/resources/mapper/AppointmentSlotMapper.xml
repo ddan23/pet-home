@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.AppointmentSlotMapper">
+
+    <resultMap id="appointmentSlotMap" type="com.hnist.entity.AppointmentSlot">
+        <id property="id" column="id"/>
+        <result property="shopId" column="shop_id"/>
+        <result property="serviceId" column="service_id"/>
+        <result property="slotDate" column="slot_date"/>
+        <result property="dayStatus" column="day_status"/>
+        <result property="startTime" column="start_time"/>
+        <result property="endTime" column="end_time"/>
+        <result property="capacity" column="capacity"/>
+        <result property="bookedCount" column="booked_count"/>
+        <result property="status" column="status"/>
+        <result property="version" column="version"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="remaining" column="remaining"/>
+        <result property="serviceName" column="service_name"/>
+        <result property="orderId" column="order_id"/>
+    </resultMap>
+
+    <sql id="publicSlotColumns">
+        ast.*,
+        CASE
+            WHEN ast.booked_count &gt;= ast.capacity THEN 'FULL'
+            ELSE ast.status
+        END AS status,
+        ast.capacity - ast.booked_count AS remaining,
+        p.name AS service_name
+    </sql>
+
+    <select id="selectPublicByServiceId" resultMap="appointmentSlotMap">
+        SELECT
+        <include refid="publicSlotColumns"/>
+        FROM appointment_slots AS ast
+        INNER JOIN products AS p ON p.id = ast.service_id
+        INNER JOIN shops AS sh ON sh.id = ast.shop_id AND sh.archived_at IS NULL
+        INNER JOIN users AS owner ON owner.id = sh.owner_id AND owner.status = 'normal'
+        WHERE ast.service_id = #{serviceId}
+          AND ast.slot_date BETWEEN #{from} AND #{to}
+          AND ast.status = 'OPEN'
+          AND ast.day_status = 'OPEN'
+          AND p.status = 'on'
+          AND p.product_type = 'service'
+          AND sh.status = 'open'
+          AND TIMESTAMP(ast.slot_date, ast.end_time) &gt; NOW()
+        ORDER BY ast.slot_date, ast.start_time
+    </select>
+
+    <select id="selectByServiceIdAndShopId" resultMap="appointmentSlotMap">
+        SELECT
+            ast.*,
+            ast.capacity - ast.booked_count AS remaining,
+            p.name AS service_name
+        FROM appointment_slots AS ast
+        INNER JOIN products AS p ON p.id = ast.service_id
+        WHERE ast.service_id = #{serviceId}
+          AND ast.shop_id = #{shopId}
+          AND ast.slot_date BETWEEN #{from} AND #{to}
+        ORDER BY ast.slot_date, ast.start_time
+    </select>
+
+    <select id="selectById" resultMap="appointmentSlotMap">
+        SELECT
+            ast.*,
+            ast.capacity - ast.booked_count AS remaining,
+            p.name AS service_name
+        FROM appointment_slots AS ast
+        INNER JOIN products AS p ON p.id = ast.service_id
+        WHERE ast.id = #{id}
+    </select>
+
+    <select id="selectByIds" resultMap="appointmentSlotMap">
+        SELECT
+            ast.*,
+            ast.capacity - ast.booked_count AS remaining,
+            p.name AS service_name
+        FROM appointment_slots AS ast
+        INNER JOIN products AS p ON p.id = ast.service_id
+        WHERE ast.id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        ORDER BY ast.slot_date, ast.start_time
+    </select>
+
+    <select id="selectByOrderIds" resultMap="appointmentSlotMap">
+        SELECT
+            ast.*,
+            ast.capacity - ast.booked_count AS remaining,
+            p.name AS service_name,
+            oast.order_id AS order_id
+        FROM order_appointment_slots AS oast
+        INNER JOIN appointment_slots AS ast ON ast.id = oast.slot_id
+        INNER JOIN products AS p ON p.id = ast.service_id
+        WHERE oast.order_id IN
+        <foreach collection="orderIds" item="orderId" open="(" separator="," close=")">
+            #{orderId}
+        </foreach>
+        ORDER BY ast.slot_date, ast.start_time
+    </select>
+
+    <select id="countByServiceIdAndDateAndStartTime" resultType="int">
+        SELECT COUNT(*)
+        FROM appointment_slots
+        WHERE service_id = #{serviceId}
+          AND slot_date = #{slotDate}
+          AND start_time = #{startTime}
+    </select>
+
+    <select id="countByServiceIdAndShopIdAndDate" resultType="int">
+        SELECT COUNT(*)
+        FROM appointment_slots
+        WHERE service_id = #{serviceId}
+          AND shop_id = #{shopId}
+          AND slot_date = #{slotDate}
+    </select>
+
+    <update id="updateDayStatus">
+        UPDATE appointment_slots
+        SET day_status = #{dayStatus},
+            version = version + 1
+        WHERE service_id = #{serviceId}
+          AND shop_id = #{shopId}
+          AND slot_date = #{slotDate}
+    </update>
+
+    <!-- 只删无订单引用的未约时段：被引用行是取消/完成订单的历史凭证（FK fk_order_slot_slot RESTRICT），
+         物理删除会被外键拦截，改由 hideReferencedUnbookedSlots 隐藏，生成时段时按新规则恢复 -->
+    <delete id="deleteByServiceIdAndShopIdAndDate">
+        DELETE ast
+        FROM appointment_slots ast
+        WHERE ast.service_id = #{serviceId}
+          AND ast.shop_id = #{shopId}
+          AND ast.slot_date = #{slotDate}
+          AND ast.booked_count = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM order_appointment_slots oas WHERE oas.slot_id = ast.id
+          )
+    </delete>
+
+    <!-- 隐藏被订单引用且已无人预约的时段：day_status 置 CLOSED 使其退出用户端可约列表，
+         生成时段命中同一 start_time 时由 refreshUnbookedTemplate 按新规则恢复 -->
+    <update id="hideReferencedUnbookedSlots">
+        UPDATE appointment_slots ast
+        SET ast.day_status = 'CLOSED'
+        WHERE ast.service_id = #{serviceId}
+          AND ast.shop_id = #{shopId}
+          AND ast.slot_date = #{slotDate}
+          AND ast.booked_count = 0
+          AND EXISTS (
+              SELECT 1 FROM order_appointment_slots oas WHERE oas.slot_id = ast.id
+          )
+    </update>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT IGNORE INTO appointment_slots (
+            shop_id, service_id, slot_date, start_time, end_time,
+            capacity, booked_count, status
+        ) VALUES (
+            #{shopId}, #{serviceId}, #{slotDate}, #{startTime}, #{endTime},
+            #{capacity}, 0, #{status}
+        )
+    </insert>
+
+    <!-- 刷新未被预约（booked_count = 0）的复用行：同时恢复 day_status/status 为 OPEN，
+         让重建前被隐藏的历史引用行在新规则包含该 start_time 时重新可约 -->
+    <update id="refreshUnbookedTemplate">
+        UPDATE appointment_slots
+        SET end_time = #{endTime},
+            capacity = #{capacity},
+            day_status = 'OPEN',
+            status = 'OPEN'
+        WHERE service_id = #{serviceId}
+          AND slot_date = #{slotDate}
+          AND start_time = #{startTime}
+          AND booked_count = 0
+    </update>
+
+    <update id="tryReserve">
+        UPDATE appointment_slots
+        SET booked_count = booked_count + 1,
+            version = version + 1
+        WHERE id = #{id}
+          AND status = 'OPEN'
+          AND booked_count &lt; capacity
+    </update>
+
+    <update id="release">
+        UPDATE appointment_slots
+        SET booked_count = GREATEST(booked_count - 1, 0),
+            version = version + 1
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateCapacity">
+        UPDATE appointment_slots
+        SET capacity = #{capacity},
+            version = version + 1
+        WHERE id = #{id}
+          AND shop_id = #{shopId}
+          AND status &lt;&gt; 'EXPIRED'
+          AND booked_count &lt;= #{capacity}
+    </update>
+
+    <update id="close">
+        UPDATE appointment_slots
+        SET status = 'CLOSED',
+            version = version + 1
+        WHERE id = #{id}
+          AND shop_id = #{shopId}
+          AND status = 'OPEN'
+          AND booked_count = 0
+    </update>
+
+    <update id="open">
+        UPDATE appointment_slots
+        SET status = 'OPEN',
+            version = version + 1
+        WHERE id = #{id}
+          AND shop_id = #{shopId}
+          AND status = 'CLOSED'
+    </update>
+</mapper>

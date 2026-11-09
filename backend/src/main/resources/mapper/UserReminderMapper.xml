@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.UserReminderMapper">
+    <resultMap id="reminderMap" type="com.hnist.entity.UserReminder">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="petId" column="pet_id"/>
+        <result property="title" column="title"/>
+        <result property="reminderType" column="reminder_type"/>
+        <result property="remindAt" column="remind_at"/>
+        <result property="note" column="note"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user_reminders (
+            user_id, pet_id, title, reminder_type, remind_at, note, status
+        ) VALUES (
+            #{userId}, #{petId}, #{title}, #{reminderType}, #{remindAt}, #{note}, 'active'
+        )
+    </insert>
+
+    <select id="selectByUserId" resultMap="reminderMap">
+        SELECT id, user_id, pet_id, title, reminder_type, remind_at, note, status, created_at, updated_at FROM user_reminders
+        WHERE user_id = #{userId}
+        ORDER BY remind_at IS NULL, remind_at ASC
+    </select>
+
+    <select id="selectDueUnnotified" resultMap="reminderMap">
+        SELECT r.*
+        FROM user_reminders AS r
+        INNER JOIN users AS u ON u.id = r.user_id
+        WHERE r.status = 'active'
+          AND r.remind_at IS NOT NULL
+          AND r.remind_at &lt;= NOW()
+          AND u.status = 'normal'
+          AND u.role = 'user'
+        ORDER BY r.remind_at ASC
+        LIMIT 100
+    </select>
+
+    <select id="selectByIdAndUserId" resultMap="reminderMap">
+        SELECT id, user_id, pet_id, title, reminder_type, remind_at, note, status, created_at, updated_at FROM user_reminders
+        WHERE id = #{id}
+          AND user_id = #{userId}
+    </select>
+
+    <update id="updateOwn">
+        UPDATE user_reminders
+        SET pet_id = #{petId},
+            title = #{title},
+            remind_at = #{remindAt},
+            note = #{note}
+        WHERE id = #{id}
+          AND user_id = #{userId}
+          AND status = 'active'
+    </update>
+
+    <update id="markNotified">
+        UPDATE user_reminders
+        SET status = 'notified'
+        WHERE id = #{id}
+          AND status = 'active'
+    </update>
+
+    <update id="completeOwn">
+        UPDATE user_reminders
+        SET status = 'completed'
+        WHERE id = #{id}
+          AND user_id = #{userId}
+          AND status IN ('active', 'notified')
+    </update>
+
+    <delete id="deleteOwn">
+        DELETE FROM user_reminders
+        WHERE id = #{id}
+          AND user_id = #{userId}
+    </delete>
+</mapper>

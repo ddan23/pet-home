@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.ShopMapper">
+
+    <resultMap id="shopMap" type="com.hnist.entity.Shop">
+        <id property="id" column="id"/>
+        <result property="ownerId" column="owner_id"/>
+        <result property="flagshipId" column="flagship_id"/>
+        <result property="name" column="name"/>
+        <result property="shopCode" column="shop_code"/>
+        <result property="type" column="type"/>
+        <result property="status" column="status"/>
+        <result property="logo" column="logo"/>
+        <result property="description" column="description"/>
+        <result property="businessHours" column="business_hours"/>
+        <result property="address" column="address"/>
+        <result property="totalSales" column="total_sales"/>
+        <result property="rating" column="rating"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="archivedAt" column="archived_at"/>
+        <result property="merchantName" column="merchant_name"/>
+        <result property="contactPhone" column="contact_phone"/>
+    </resultMap>
+
+    <select id="selectByOwnerId" resultMap="shopMap">
+        SELECT id, owner_id, flagship_id, name, type, shop_code, status, archived_at, logo, description,
+               business_hours, address, contact_phone, city, district, total_sales, rating, created_at FROM shops
+        WHERE owner_id = #{ownerId}
+          AND archived_at IS NULL
+        ORDER BY CASE WHEN type = 'mall' THEN 0 ELSE 1 END, id
+        LIMIT 1
+    </select>
+
+    <select id="selectFlagshipByOwner" resultMap="shopMap">
+        SELECT id, owner_id, flagship_id, name, type, shop_code, status, archived_at, logo, description,
+               business_hours, address, contact_phone, city, district, total_sales, rating, created_at FROM shops
+        WHERE owner_id = #{ownerId}
+          AND type = 'mall'
+          AND archived_at IS NULL
+        LIMIT 1
+    </select>
+
+    <select id="selectByOwner" resultMap="shopMap">
+        SELECT id, owner_id, flagship_id, name, type, shop_code, status, archived_at, logo, description,
+               business_hours, address, contact_phone, city, district, total_sales, rating, created_at FROM shops
+        WHERE owner_id = #{ownerId}
+          AND archived_at IS NULL
+        ORDER BY CASE WHEN type = 'mall' THEN 0 ELSE 1 END, created_at, id
+    </select>
+
+    <select id="selectServiceOutletsByOwner" resultMap="shopMap">
+        SELECT id, owner_id, flagship_id, name, type, shop_code, status, archived_at, logo, description,
+               business_hours, address, contact_phone, city, district, total_sales, rating, created_at FROM shops
+        WHERE owner_id = #{ownerId}
+          AND type = 'service'
+          AND archived_at IS NULL
+        ORDER BY created_at, id
+    </select>
+
+    <select id="selectOwnedServiceOutlet" resultMap="shopMap">
+        SELECT id, owner_id, flagship_id, name, type, shop_code, status, archived_at, logo, description,
+               business_hours, address, contact_phone, city, district, total_sales, rating, created_at FROM shops
+        WHERE id = #{id}
+          AND owner_id = #{ownerId}
+          AND type = 'service'
+          AND archived_at IS NULL
+    </select>
+
+    <select id="selectById" resultMap="shopMap">
+        SELECT id, owner_id, flagship_id, name, type, shop_code, status, archived_at, logo, description,
+               business_hours, address, contact_phone, city, district, total_sales, rating, created_at FROM shops WHERE id = #{id}
+    </select>
+
+    <select id="selectPublicById" resultMap="shopMap">
+        SELECT s.*
+        FROM shops AS s
+        INNER JOIN users AS owner ON owner.id = s.owner_id AND owner.status = 'normal'
+        WHERE s.id = #{id}
+          AND s.status = 'open'
+          AND s.archived_at IS NULL
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO shops (
+            owner_id, flagship_id, name, shop_code, type, status, logo, description,
+            business_hours, address, contact_phone, total_sales
+        )
+        VALUES (
+            #{ownerId}, #{flagshipId}, #{name}, #{shopCode}, #{type}, #{status}, #{logo},
+            #{description}, #{businessHours}, #{address}, #{contactPhone}, #{totalSales}
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE shops
+        SET name = #{name},
+            shop_code = #{shopCode},
+            description = #{description},
+            business_hours = #{businessHours},
+            address = #{address},
+            contact_phone = #{contactPhone},
+            logo = #{logo}
+        WHERE id = #{id}
+          AND archived_at IS NULL
+    </update>
+
+    <update id="attachOrphanServiceOutlets">
+        UPDATE shops
+        SET flagship_id = #{flagshipId}
+        WHERE owner_id = #{ownerId}
+          AND type = 'service'
+          AND flagship_id IS NULL
+          AND archived_at IS NULL
+    </update>
+
+    <!-- ===== 管理员扩展 ===== -->
+    <select id="selectAll" resultMap="shopMap">
+        SELECT s.*, u.username AS merchant_name
+        FROM shops AS s
+        LEFT JOIN users AS u ON s.owner_id = u.id
+        WHERE s.archived_at IS NULL
+        <if test="status != null and status != ''">
+            AND s.status = #{status}
+        </if>
+        <if test="type != null and type != ''">
+            AND s.type = #{type}
+        </if>
+        <if test="merchantId != null">
+            AND s.owner_id = #{merchantId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (s.name LIKE CONCAT(#{keyword}, '%') OR u.username LIKE CONCAT(#{keyword}, '%'))
+        </if>
+        ORDER BY s.created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countAll" resultType="int">
+        SELECT COUNT(*)
+        FROM shops AS s
+        LEFT JOIN users AS u ON s.owner_id = u.id
+        WHERE s.archived_at IS NULL
+        <if test="status != null and status != ''">
+            AND s.status = #{status}
+        </if>
+        <if test="type != null and type != ''">
+            AND s.type = #{type}
+        </if>
+        <if test="merchantId != null">
+            AND s.owner_id = #{merchantId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (s.name LIKE CONCAT(#{keyword}, '%') OR u.username LIKE CONCAT(#{keyword}, '%'))
+        </if>
+    </select>
+
+    <select id="selectByIdWithMerchant" resultMap="shopMap">
+        SELECT s.*, u.username AS merchant_name
+        FROM shops AS s
+        LEFT JOIN users AS u ON s.owner_id = u.id
+        WHERE s.id = #{id}
+    </select>
+
+    <update id="updateStatus">
+        UPDATE shops SET status = #{status}
+        WHERE id = #{id}
+          AND archived_at IS NULL
+    </update>
+
+
+    <update id="updateStatusByOwner">
+        UPDATE shops SET status = #{status} WHERE owner_id = #{ownerId}
+    </update>
+</mapper>

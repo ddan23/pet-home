@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.PostCommentMapper">
+    <resultMap id="commentMap" type="com.hnist.entity.PostComment">
+        <id property="id" column="id"/>
+        <result property="postId" column="post_id"/>
+        <result property="senderId" column="user_id"/>
+        <result property="parentId" column="parent_id"/>
+        <result property="rootId" column="root_id"/>
+        <result property="content" column="content"/>
+        <result property="status" column="status"/>
+        <result property="likeCount" column="like_count"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="senderName" column="sender_name"/>
+        <result property="senderAvatar" column="sender_avatar"/>
+        <result property="postTitle" column="post_title"/>
+        <result property="postUserId" column="post_user_id"/>
+    </resultMap>
+
+    <resultMap id="myCommentMap" type="com.hnist.vo.MyCommentResponse">
+        <id property="id" column="id"/>
+        <result property="postId" column="post_id"/>
+        <result property="postTitle" column="post_title"/>
+        <result property="postAuthorName" column="post_author_name"/>
+        <result property="content" column="content"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="commentMap">
+        SELECT c.*, u.nickname AS sender_name, u.avatar AS sender_avatar
+        FROM post_comments AS c
+        LEFT JOIN users AS u ON c.user_id = u.id
+        WHERE c.id = #{id} AND c.deleted_at IS NULL
+    </select>
+
+    <select id="selectByPostId" resultMap="commentMap">
+        SELECT c.*, u.nickname AS sender_name, u.avatar AS sender_avatar
+        FROM post_comments AS c
+        LEFT JOIN users AS u ON c.user_id = u.id
+        WHERE c.post_id = #{postId} AND c.status = 'normal' AND c.deleted_at IS NULL
+        ORDER BY c.created_at ASC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countByPostId" resultType="int">
+        SELECT COUNT(*) FROM post_comments
+        WHERE post_id = #{postId} AND status = 'normal' AND deleted_at IS NULL
+    </select>
+
+    <!-- 系统端：查看帖子全部评论（含待审核/已拒绝，便于人工复核） -->
+    <select id="selectByPostIdForAdmin" resultMap="commentMap">
+        SELECT c.*, u.nickname AS sender_name, u.avatar AS sender_avatar
+        FROM post_comments AS c
+        LEFT JOIN users AS u ON c.user_id = u.id
+        WHERE c.post_id = #{postId} AND c.deleted_at IS NULL
+        ORDER BY c.created_at ASC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countByPostIdForAdmin" resultType="int">
+        SELECT COUNT(*) FROM post_comments
+        WHERE post_id = #{postId} AND deleted_at IS NULL
+    </select>
+
+    <select id="selectPending" resultMap="commentMap">
+        SELECT c.*, u.nickname AS sender_name, u.avatar AS sender_avatar,
+               p.title AS post_title, p.user_id AS post_user_id
+        FROM post_comments AS c
+        LEFT JOIN users AS u ON c.user_id = u.id
+        INNER JOIN posts AS p ON p.id = c.post_id
+        WHERE c.status = 'pending' AND c.deleted_at IS NULL AND p.deleted_at IS NULL
+        ORDER BY c.created_at ASC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countPending" resultType="int">
+        SELECT COUNT(*)
+        FROM post_comments AS c
+        INNER JOIN posts AS p ON p.id = c.post_id
+        WHERE c.status = 'pending' AND c.deleted_at IS NULL AND p.deleted_at IS NULL
+    </select>
+
+    <select id="selectForAdmin" resultMap="commentMap">
+        SELECT c.*, u.nickname AS sender_name, u.avatar AS sender_avatar,
+               p.title AS post_title, p.user_id AS post_user_id
+        FROM post_comments AS c
+        LEFT JOIN users AS u ON c.user_id = u.id
+        INNER JOIN posts AS p ON p.id = c.post_id
+        WHERE c.deleted_at IS NULL AND p.deleted_at IS NULL
+        <if test="status != null and status != ''">
+            AND c.status = #{status}
+        </if>
+        ORDER BY c.created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countForAdmin" resultType="int">
+        SELECT COUNT(*)
+        FROM post_comments AS c
+        INNER JOIN posts AS p ON p.id = c.post_id
+        WHERE c.deleted_at IS NULL AND p.deleted_at IS NULL
+        <if test="status != null and status != ''">
+            AND c.status = #{status}
+        </if>
+    </select>
+
+    <select id="selectMyComments" resultMap="myCommentMap">
+        SELECT c.id,
+               c.post_id,
+               COALESCE(NULLIF(p.title, ''), '无标题帖子') AS post_title,
+               COALESCE(NULLIF(author.nickname, ''), author.username, '社区用户')
+                   AS post_author_name,
+               c.content,
+               c.status,
+               c.created_at
+        FROM post_comments AS c
+        INNER JOIN posts AS p ON p.id = c.post_id
+        LEFT JOIN users AS author ON author.id = p.user_id
+        WHERE c.user_id = #{userId}
+          AND c.deleted_at IS NULL
+          AND p.deleted_at IS NULL
+        ORDER BY c.created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countMyComments" resultType="int">
+        SELECT COUNT(*)
+        FROM post_comments AS c
+        INNER JOIN posts AS p ON p.id = c.post_id
+        WHERE c.user_id = #{userId}
+          AND c.deleted_at IS NULL
+          AND p.deleted_at IS NULL
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO post_comments (
+            post_id, user_id, parent_id, root_id, content, status
+        ) VALUES (
+            #{postId}, #{senderId}, #{parentId}, #{rootId}, #{content}, #{status}
+        )
+    </insert>
+
+    <update id="deleteById">
+        UPDATE post_comments SET deleted_at = NOW() WHERE id = #{id} AND deleted_at IS NULL
+    </update>
+
+    <update id="updateStatus">
+        UPDATE post_comments
+        SET status = #{status}
+        WHERE id = #{id} AND status = 'pending' AND deleted_at IS NULL
+    </update>
+
+    <update id="updateStatusIfCurrent">
+        UPDATE post_comments
+        SET status = #{status}
+        WHERE id = #{id}
+          AND status = #{currentStatus}
+          AND deleted_at IS NULL
+    </update>
+
+    <update id="updateStatusByAdmin">
+        UPDATE post_comments
+        SET status = #{status}
+        WHERE id = #{id}
+          AND status != #{status}
+          AND deleted_at IS NULL
+    </update>
+</mapper>

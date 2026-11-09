@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.NotificationMapper">
+    <resultMap id="notificationMap" type="com.hnist.entity.Notification">
+        <id property="id" column="id"/>
+        <result property="receiverId" column="user_id"/>
+        <result property="senderId" column="sender_id"/>
+        <result property="category" column="category"/>
+        <result property="type" column="type"/>
+        <result property="level" column="level"/>
+        <result property="title" column="title"/>
+        <result property="content" column="content"/>
+        <result property="relatedType" column="related_type"/>
+        <result property="relatedId" column="related_id"/>
+        <result property="actionUrl" column="action_url"/>
+        <result property="dedupeKey" column="dedupe_key"/>
+        <result property="read" column="is_read"/>
+        <result property="readAt" column="read_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="senderName" column="sender_name"/>
+        <result property="senderAvatar" column="sender_avatar"/>
+        <result property="senderShopName" column="sender_shop_name"/>
+        <result property="senderShopLogo" column="sender_shop_logo"/>
+    </resultMap>
+
+    <sql id="notificationColumns">
+        n.*, u.nickname AS sender_name, u.avatar AS sender_avatar,
+        (SELECT s.name FROM shops AS s
+         WHERE s.owner_id = n.sender_id AND s.type = 'mall' AND s.archived_at IS NULL
+         LIMIT 1) AS sender_shop_name,
+        (SELECT s.logo FROM shops AS s
+         WHERE s.owner_id = n.sender_id AND s.type = 'mall' AND s.archived_at IS NULL
+         LIMIT 1) AS sender_shop_logo
+    </sql>
+
+    <sql id="receiverFilter">
+        n.user_id = #{receiverId}
+        AND n.deleted_at IS NULL
+        <if test="categories != null and categories.size() > 0">
+            AND n.category IN
+            <foreach collection="categories" item="category" open="(" separator="," close=")">
+                #{category}
+            </foreach>
+        </if>
+        <if test="types != null and types.size() > 0">
+            AND n.type IN
+            <foreach collection="types" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        </if>
+    </sql>
+
+    <select id="selectById" resultMap="notificationMap">
+        SELECT <include refid="notificationColumns"/>
+        FROM notifications AS n
+        LEFT JOIN users AS u ON n.sender_id = u.id
+        WHERE n.id = #{id} AND n.deleted_at IS NULL
+    </select>
+
+    <select id="selectByReceiver" resultMap="notificationMap">
+        SELECT <include refid="notificationColumns"/>
+        FROM notifications AS n
+        LEFT JOIN users AS u ON n.sender_id = u.id
+        WHERE <include refid="receiverFilter"/>
+        ORDER BY n.created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countByReceiver" resultType="int">
+        SELECT COUNT(*) FROM notifications AS n
+        WHERE <include refid="receiverFilter"/>
+    </select>
+
+    <select id="selectAll" resultMap="notificationMap">
+        SELECT <include refid="notificationColumns"/>
+        FROM notifications AS n
+        LEFT JOIN users AS u ON n.sender_id = u.id
+        WHERE n.deleted_at IS NULL AND n.category = 'system'
+        <if test="type != null and type != ''">
+            AND n.type = #{type}
+        </if>
+        ORDER BY n.created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countAll" resultType="int">
+        SELECT COUNT(*) FROM notifications
+        WHERE deleted_at IS NULL AND category = 'system'
+        <if test="type != null and type != ''">
+            AND type = #{type}
+        </if>
+    </select>
+
+    <select id="countUnread" resultType="int">
+        SELECT COUNT(*) FROM notifications
+        WHERE user_id = #{receiverId} AND is_read = 0 AND deleted_at IS NULL
+    </select>
+
+    <select id="selectUnreadCountsByCategory"
+            resultType="com.hnist.vo.NotificationCategoryCount">
+        SELECT category, COUNT(*) AS unread_count
+        FROM notifications
+        WHERE user_id = #{receiverId}
+          AND is_read = 0
+          AND deleted_at IS NULL
+          AND category IN
+          <foreach collection="categories" item="category" open="(" separator="," close=")">
+              #{category}
+          </foreach>
+        GROUP BY category
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO notifications (
+            user_id, sender_id, category, type, level, title, content,
+            related_type, related_id, action_url, dedupe_key
+        ) VALUES (
+            #{receiverId}, #{senderId}, #{category}, #{type}, #{level}, #{title}, #{content},
+            #{relatedType}, #{relatedId}, #{actionUrl}, #{dedupeKey}
+        )
+    </insert>
+
+    <insert id="insertBatch">
+        INSERT INTO notifications (
+            user_id, sender_id, category, type, level, title, content,
+            related_type, related_id, action_url
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.receiverId}, #{item.senderId}, #{item.category}, #{item.type}, #{item.level},
+             #{item.title}, #{item.content}, #{item.relatedType}, #{item.relatedId}, #{item.actionUrl})
+        </foreach>
+    </insert>
+
+    <update id="markRead">
+        UPDATE notifications
+        SET is_read = 1, read_at = COALESCE(read_at, NOW())
+        WHERE id = #{id} AND user_id = #{receiverId} AND deleted_at IS NULL
+    </update>
+
+    <update id="markAllRead">
+        UPDATE notifications
+        SET is_read = 1, read_at = NOW()
+        WHERE user_id = #{receiverId} AND is_read = 0
+    </update>
+
+    <update id="deleteById">
+        UPDATE notifications SET deleted_at = NOW() WHERE id = #{id}
+    </update>
+
+    <update id="deleteOwnById">
+        UPDATE notifications
+        SET deleted_at = NOW()
+        WHERE id = #{id}
+          AND user_id = #{receiverId}
+          AND deleted_at IS NULL
+    </update>
+
+    <update id="deleteAllRead">
+        UPDATE notifications
+        SET deleted_at = NOW()
+        WHERE user_id = #{receiverId}
+          AND is_read = 1
+          AND deleted_at IS NULL
+    </update>
+
+    <select id="selectUserIdsByRole" resultType="int">
+        SELECT id FROM users WHERE role = #{role} AND status = 'normal'
+    </select>
+
+    <select id="selectMemberUserIds" resultType="int">
+        SELECT id
+        FROM users
+        WHERE role IN ('user', 'business') AND status = 'normal'
+    </select>
+</mapper>

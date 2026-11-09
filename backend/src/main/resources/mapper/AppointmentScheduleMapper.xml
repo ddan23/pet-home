@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.AppointmentScheduleMapper">
+
+    <resultMap id="appointmentScheduleMap" type="com.hnist.entity.AppointmentSchedule">
+        <id property="id" column="id"/>
+        <result property="shopId" column="shop_id"/>
+        <result property="serviceId" column="service_id"/>
+        <result property="startTime" column="start_time"/>
+        <result property="endTime" column="end_time"/>
+        <result property="breakStart" column="break_start"/>
+        <result property="breakEnd" column="break_end"/>
+        <result property="intervalMinutes" column="interval_minutes"/>
+        <result property="capacityPerSlot" column="capacity_per_slot"/>
+        <result property="enabled" column="enabled"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="scheduleColumns">
+        id, shop_id, service_id, start_time, end_time,
+        break_start, break_end, interval_minutes, capacity_per_slot, enabled, created_at, updated_at
+    </sql>
+
+    <select id="selectByServiceId" resultMap="appointmentScheduleMap">
+        SELECT <include refid="scheduleColumns"/>
+        FROM appointment_schedules
+        WHERE service_id = #{serviceId}
+    </select>
+
+    <select id="selectAllTemplates" resultMap="appointmentScheduleMap">
+        SELECT <include refid="scheduleColumns"/>
+        FROM appointment_schedules
+        ORDER BY service_id
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO appointment_schedules (
+            shop_id, service_id, start_time, end_time,
+            break_start, break_end, interval_minutes, capacity_per_slot, enabled
+        ) VALUES (
+            #{shopId}, #{serviceId}, #{startTime}, #{endTime},
+            #{breakStart}, #{breakEnd}, #{intervalMinutes}, #{capacityPerSlot}, #{enabled}
+        )
+    </insert>
+
+    <update id="updateByServiceIdAndShopId">
+        UPDATE appointment_schedules
+        SET start_time = #{schedule.startTime},
+            end_time = #{schedule.endTime},
+            break_start = #{schedule.breakStart},
+            break_end = #{schedule.breakEnd},
+            interval_minutes = #{schedule.intervalMinutes},
+            capacity_per_slot = #{schedule.capacityPerSlot},
+            enabled = #{schedule.enabled}
+        WHERE service_id = #{schedule.serviceId}
+          AND shop_id = #{shopId}
+    </update>
+
+    <delete id="deleteByServiceId">
+        DELETE FROM appointment_schedules
+        WHERE service_id = #{serviceId}
+    </delete>
+</mapper>

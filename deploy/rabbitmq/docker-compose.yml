@@ -1,0 +1,30 @@
+# RabbitMQ 部署留档（Windows + Docker Desktop）
+#
+# 用途：猫狗宠物之家三条消息链路的中间件——
+#   1) 评论 AI 审核（comment.moderation.exchange -> comment.moderation.queue，工作队列）
+#   2) 站内通知扇出（notification.fanout.exchange -> notification.write.queue，fanout）
+#   3) 订单支付超时关单（order.pay.timeout.exchange -> order.pay.timeout.queue[TTL 10min]
+#      -> order.close.exchange(DLX) -> order.close.queue）
+#
+# 数据挂载：D:\project\pethome_date（首次启动时在该目录初始化 Mnesia 数据，账号 root/1234）
+# 管理台：http://localhost:15673 （root / 1234）
+# AMQP 端口：5673（本机 5672 已被其他项目占用，后端 spring.rabbitmq 默认端口已同步为 5673）
+#
+# 启动：docker compose -f deploy/rabbitmq/docker-compose.yml up -d
+# 停止：docker compose -f deploy/rabbitmq/docker-compose.yml down（数据保留在挂载目录）
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: pethome-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    environment:
+      # 开发阶段弱口令，仅限本机容器；生产部署必须改为环境变量注入强口令
+      RABBITMQ_DEFAULT_USER: root
+      RABBITMQ_DEFAULT_PASS: "1234"
+    volumes:
+      # 数据目录挂载到宿主机，容器重建后交换机、队列与账号配置不丢
+      - D:/project/pethome_date:/var/lib/rabbitmq

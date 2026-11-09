@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.PetCarePlanMapper">
+    <resultMap id="carePlanMap" type="com.hnist.entity.PetCarePlan">
+        <id property="id" column="id"/>
+        <result property="petId" column="pet_id"/>
+        <result property="careType" column="care_type"/>
+        <result property="title" column="title"/>
+        <result property="plannedOn" column="planned_on"/>
+        <result property="status" column="status"/>
+        <result property="note" column="note"/>
+        <result property="completedAt" column="completed_at"/>
+    </resultMap>
+
+    <select id="selectPendingByPetId" resultMap="carePlanMap">
+        SELECT id, pet_id, care_type, title, planned_on, status, note, completed_at
+        FROM pet_care_plans
+        WHERE pet_id = #{petId}
+          AND status = 'pending'
+        ORDER BY planned_on ASC, id ASC
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO pet_care_plans (
+            pet_id, care_type, title, planned_on, status, note
+        ) VALUES (
+            #{petId}, #{careType}, #{title}, #{plannedOn}, 'pending', #{note}
+        )
+    </insert>
+
+    <delete id="deleteByPetId">
+        DELETE FROM pet_care_plans WHERE pet_id = #{petId}
+    </delete>
+</mapper>

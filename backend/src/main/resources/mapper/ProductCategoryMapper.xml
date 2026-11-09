@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.ProductCategoryMapper">
+    <resultMap id="categoryMap" type="com.hnist.entity.ProductCategory">
+        <id property="id" column="id"/>
+        <result property="parentId" column="parent_id"/>
+        <result property="productType" column="product_type"/>
+        <result property="categoryCode" column="category_code"/>
+        <result property="categoryName" column="category_name"/>
+        <result property="categoryLevel" column="category_level"/>
+        <result property="sortOrder" column="sort_order"/>
+        <result property="enabled" column="enabled"/>
+        <result property="medicalFlag" column="medical_flag"/>
+        <result property="itemCount" column="item_count"/>
+    </resultMap>
+
+    <select id="selectEnabledByProductType" resultMap="categoryMap">
+        SELECT c.id, c.parent_id, c.product_type, c.category_code,
+               c.category_name, c.category_level, c.sort_order, c.enabled,
+               c.medical_flag,
+               COUNT(CASE WHEN p.id IS NOT NULL AND s.status = 'open'
+                          AND s.archived_at IS NULL AND owner.status = 'normal'
+                          THEN 1 END) AS item_count
+        FROM product_categories AS c
+        LEFT JOIN products AS p ON p.category_id = c.id AND p.status = 'on'
+        LEFT JOIN shops AS s ON s.id = p.shop_id
+        LEFT JOIN users AS owner ON owner.id = s.owner_id
+        WHERE c.product_type = #{productType} AND c.enabled = 1
+        GROUP BY c.id
+        ORDER BY c.category_level ASC, c.sort_order ASC, c.id ASC
+    </select>
+
+    <select id="selectById" resultMap="categoryMap">
+        SELECT c.id, c.parent_id, c.product_type, c.category_code,
+               c.category_name, c.category_level, c.sort_order, c.enabled,
+               c.medical_flag, 0 AS item_count
+        FROM product_categories AS c
+        WHERE c.id = #{id}
+    </select>
+</mapper>

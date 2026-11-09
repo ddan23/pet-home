@@ -1,0 +1,7 @@
+# 格式：敏感词|REVIEW或BLOCK|分类
+# 生产环境应从内容安全规则库生成，本文件只提供毕业设计演示规则。
+出售保护动物|BLOCK|illegal_trade
+代办证件|BLOCK|fraud
+代开处方药|BLOCK|medical
+加微信返现|REVIEW|advertising
+扫码领红包|REVIEW|advertising

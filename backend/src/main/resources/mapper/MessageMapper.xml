@@ -1,0 +1,317 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.MessageMapper">
+    <resultMap id="messageMap" type="com.hnist.entity.Message">
+        <id property="id" column="id"/>
+        <result property="senderId" column="sender_id"/>
+        <result property="receiverId" column="receiver_id"/>
+        <result property="category" column="category"/>
+        <result property="type" column="type"/>
+        <result property="conversationId" column="conversation_id"/>
+        <result property="title" column="title"/>
+        <result property="content" column="content"/>
+        <result property="contentType" column="content_type"/>
+        <result property="relatedType" column="related_type"/>
+        <result property="relatedId" column="related_id"/>
+        <result property="clientMessageId" column="client_message_id"/>
+        <result property="read" column="is_read"/>
+        <result property="readAt" column="read_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="deletedAt" column="deleted_at"/>
+        <result property="senderName" column="sender_name"/>
+        <result property="senderAvatar" column="sender_avatar"/>
+        <result property="senderShopName" column="sender_shop_name"/>
+        <result property="senderShopLogo" column="sender_shop_logo"/>
+    </resultMap>
+
+    <resultMap id="conversationMap" type="com.hnist.entity.Conversation">
+        <id property="id" column="id"/>
+        <result property="category" column="category"/>
+        <result property="type" column="type"/>
+        <result property="userId" column="user_id"/>
+        <result property="targetId" column="target_id"/>
+        <result property="lastMessage" column="last_message"/>
+        <result property="lastMessageId" column="last_message_id"/>
+        <result property="lastMessageAt" column="last_message_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="unreadCount" column="unread_count"/>
+        <result property="otherUserId" column="other_user_id"/>
+        <result property="otherUserName" column="other_user_name"/>
+        <result property="otherUserAvatar" column="other_user_avatar"/>
+        <result property="otherShopName" column="other_shop_name"/>
+        <result property="otherShopLogo" column="other_shop_logo"/>
+        <result property="otherLastReadMessageId" column="other_last_read_message_id"/>
+    </resultMap>
+
+    <sql id="messageColumns">
+        m.*, u.nickname AS sender_name, u.avatar AS sender_avatar,
+        (SELECT s.name FROM shops AS s
+         WHERE s.owner_id = m.sender_id
+           AND s.type = CASE WHEN m.category = 'service' THEN 'service' ELSE 'mall' END
+           AND s.archived_at IS NULL
+         LIMIT 1) AS sender_shop_name,
+        (SELECT s.logo FROM shops AS s
+         WHERE s.owner_id = m.sender_id
+           AND s.type = CASE WHEN m.category = 'service' THEN 'service' ELSE 'mall' END
+           AND s.archived_at IS NULL
+         LIMIT 1) AS sender_shop_logo
+    </sql>
+
+    <select id="selectById" resultMap="messageMap">
+        SELECT <include refid="messageColumns"/>
+        FROM messages AS m
+        LEFT JOIN users AS u ON u.id = m.sender_id
+        WHERE m.id = #{id} AND m.deleted_at IS NULL
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO messages (
+            sender_id, receiver_id, category, type, conversation_id, title,
+            content, content_type, related_type, related_id, client_message_id, created_at
+        ) VALUES (
+            #{senderId}, #{receiverId}, #{category}, #{type}, #{conversationId}, #{title},
+            #{content}, #{contentType}, #{relatedType}, #{relatedId}, #{clientMessageId},
+            #{createdAt}
+        )
+    </insert>
+
+    <insert id="insertConversation" useGeneratedKeys="true"
+            keyProperty="conversation.id" keyColumn="id">
+        INSERT INTO conversations (category, type, user_id, target_id, last_message)
+        VALUES (
+            #{conversation.category}, #{conversation.type}, #{conversation.userId},
+            #{conversation.targetId}, #{conversation.lastMessage}
+        )
+        ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)
+    </insert>
+
+    <select id="lockConversationForUpdate" resultType="int">
+        SELECT id
+        FROM conversations
+        WHERE id = #{conversationId}
+        FOR UPDATE
+    </select>
+
+    <select id="selectConversationByPair" resultMap="conversationMap">
+        SELECT id, category, type, user_id, target_id, last_message, last_message_id, last_message_at, created_at,
+               updated_at
+        FROM conversations
+        WHERE category = #{category}
+          AND ((user_id = #{userId} AND target_id = #{targetId})
+            OR (user_id = #{targetId} AND target_id = #{userId}))
+        LIMIT 1
+    </select>
+
+    <select id="selectConversationSummaries" resultMap="conversationMap">
+        SELECT c.*, cp.unread_count,
+               CASE WHEN c.user_id = #{userId} THEN c.target_id ELSE c.user_id END AS other_user_id,
+               ou.nickname AS other_user_name,
+               ou.avatar AS other_user_avatar,
+               (SELECT s.name FROM shops AS s
+                WHERE s.owner_id = ou.id
+                  AND s.type = CASE WHEN c.category = 'service' THEN 'service' ELSE 'mall' END
+                  AND s.archived_at IS NULL
+                LIMIT 1) AS other_shop_name,
+               (SELECT s.logo FROM shops AS s
+                WHERE s.owner_id = ou.id
+                  AND s.type = CASE WHEN c.category = 'service' THEN 'service' ELSE 'mall' END
+                  AND s.archived_at IS NULL
+                LIMIT 1) AS other_shop_logo,
+               other_cp.last_read_message_id AS other_last_read_message_id
+        FROM conversations AS c
+        INNER JOIN conversation_participants AS cp
+            ON cp.conversation_id = c.id AND cp.user_id = #{userId}
+        INNER JOIN conversation_participants other_cp
+            ON other_cp.conversation_id = c.id AND other_cp.user_id &lt;&gt; #{userId}
+        LEFT JOIN users AS ou
+            ON ou.id = CASE WHEN c.user_id = #{userId} THEN c.target_id ELSE c.user_id END
+        WHERE cp.deleted_at IS NULL
+        <if test="categories != null and categories.size() > 0">
+            AND c.category IN
+            <foreach collection="categories" item="category" open="(" separator="," close=")">
+                #{category}
+            </foreach>
+        </if>
+        ORDER BY COALESCE(c.last_message_at, c.updated_at) DESC, c.id DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countConversationSummaries" resultType="int">
+        SELECT COUNT(*)
+        FROM conversations AS c
+        INNER JOIN conversation_participants AS cp
+            ON cp.conversation_id = c.id AND cp.user_id = #{userId}
+        WHERE cp.deleted_at IS NULL
+        <if test="categories != null and categories.size() > 0">
+            AND c.category IN
+            <foreach collection="categories" item="category" open="(" separator="," close=")">
+                #{category}
+            </foreach>
+        </if>
+    </select>
+
+    <select id="selectConversationForUser" resultMap="conversationMap">
+        SELECT c.*, cp.unread_count,
+               CASE WHEN c.user_id = #{userId} THEN c.target_id ELSE c.user_id END AS other_user_id,
+               ou.nickname AS other_user_name,
+               ou.avatar AS other_user_avatar,
+               (SELECT s.name FROM shops AS s
+                WHERE s.owner_id = ou.id
+                  AND s.type = CASE WHEN c.category = 'service' THEN 'service' ELSE 'mall' END
+                  AND s.archived_at IS NULL
+                LIMIT 1) AS other_shop_name,
+               (SELECT s.logo FROM shops AS s
+                WHERE s.owner_id = ou.id
+                  AND s.type = CASE WHEN c.category = 'service' THEN 'service' ELSE 'mall' END
+                  AND s.archived_at IS NULL
+                LIMIT 1) AS other_shop_logo,
+               other_cp.last_read_message_id AS other_last_read_message_id
+        FROM conversations AS c
+        INNER JOIN conversation_participants AS cp
+            ON cp.conversation_id = c.id AND cp.user_id = #{userId}
+        INNER JOIN conversation_participants other_cp
+            ON other_cp.conversation_id = c.id AND other_cp.user_id &lt;&gt; #{userId}
+        LEFT JOIN users AS ou
+            ON ou.id = CASE WHEN c.user_id = #{userId} THEN c.target_id ELSE c.user_id END
+        WHERE c.id = #{conversationId}
+          AND cp.deleted_at IS NULL
+        LIMIT 1
+    </select>
+
+    <insert id="insertParticipant">
+        INSERT IGNORE INTO conversation_participants (conversation_id, user_id)
+        VALUES (#{conversationId}, #{userId})
+    </insert>
+
+    <select id="selectParticipantIds" resultType="int">
+        SELECT user_id
+        FROM conversation_participants
+        WHERE conversation_id = #{conversationId}
+        ORDER BY user_id
+    </select>
+
+    <select id="selectByClientMessageId" resultMap="messageMap">
+        SELECT m.*
+        FROM messages AS m
+        WHERE m.conversation_id = #{conversationId}
+          AND m.sender_id = #{senderId}
+          AND m.client_message_id = #{clientMessageId}
+          AND m.deleted_at IS NULL
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
+    <select id="selectLatestMessages" resultMap="messageMap">
+        SELECT <include refid="messageColumns"/>
+        FROM messages AS m
+        LEFT JOIN users AS u ON u.id = m.sender_id
+        WHERE m.conversation_id = #{conversationId}
+          AND m.deleted_at IS NULL
+        <if test="afterMessageId != null">
+            AND m.id &gt; #{afterMessageId}
+        </if>
+        <if test="beforeId != null">
+            AND m.id &lt; #{beforeId}
+        </if>
+        ORDER BY m.id DESC
+        LIMIT #{limit}
+    </select>
+
+    <update id="incrementParticipantUnread">
+        UPDATE conversation_participants
+        SET unread_count = unread_count + 1,
+            deleted_at = NULL
+        WHERE conversation_id = #{conversationId}
+          AND user_id = #{userId}
+    </update>
+
+    <update id="markConversationMessagesRead">
+        UPDATE messages
+        SET is_read = 1, read_at = NOW()
+        WHERE conversation_id = #{conversationId}
+          AND receiver_id = #{userId}
+          AND is_read = 0
+          AND deleted_at IS NULL
+        <if test="lastMessageId != null">
+            AND id &lt;= #{lastMessageId}
+        </if>
+    </update>
+
+    <update id="updateParticipantRead">
+        UPDATE conversation_participants cp
+        SET cp.unread_count = (
+                SELECT COUNT(*)
+                FROM messages AS m
+                WHERE m.conversation_id = cp.conversation_id
+                  AND m.receiver_id = cp.user_id
+                  AND m.is_read = 0
+                  AND m.deleted_at IS NULL
+            ),
+            cp.last_read_message_id = CASE
+                WHEN #{lastMessageId} IS NULL THEN cp.last_read_message_id
+                WHEN cp.last_read_message_id IS NULL OR cp.last_read_message_id &lt; #{lastMessageId}
+                    THEN #{lastMessageId}
+                ELSE cp.last_read_message_id
+            END,
+            cp.last_read_at = NOW()
+        WHERE cp.conversation_id = #{conversationId}
+          AND cp.user_id = #{userId}
+    </update>
+
+    <select id="sumConversationUnread" resultType="int">
+        SELECT COALESCE(SUM(unread_count), 0)
+        FROM conversation_participants
+        WHERE user_id = #{userId}
+          AND deleted_at IS NULL
+    </select>
+
+    <select id="selectConversationUnreadCountsByCategory"
+            resultType="com.hnist.vo.ConversationUnreadCount">
+        SELECT c.category AS category,
+               COALESCE(SUM(cp.unread_count), 0) AS unread_count
+        FROM conversation_participants AS cp
+        INNER JOIN conversations AS c ON c.id = cp.conversation_id
+        WHERE cp.user_id = #{userId}
+          AND cp.deleted_at IS NULL
+        GROUP BY c.category
+    </select>
+
+    <update id="updateConversationLastMessage">
+        UPDATE conversations
+        SET last_message_id = #{messageId},
+            last_message = #{preview},
+            last_message_at = #{messageAt},
+            updated_at = NOW()
+        WHERE id = #{conversationId}
+    </update>
+
+    <select id="selectClearedBeforeMessageId" resultType="java.lang.Integer">
+        SELECT cleared_before_message_id
+        FROM conversation_participants
+        WHERE conversation_id = #{conversationId}
+          AND user_id = #{userId}
+    </select>
+
+    <update id="hideConversation">
+        UPDATE conversation_participants
+        SET deleted_at = NOW(),
+            cleared_before_message_id = GREATEST(
+                COALESCE(cleared_before_message_id, 0),
+                COALESCE(#{clearedBeforeMessageId}, 0)
+            ),
+            unread_count = 0
+        WHERE conversation_id = #{conversationId}
+          AND user_id = #{userId}
+          AND deleted_at IS NULL
+    </update>
+
+    <update id="restoreConversation">
+        UPDATE conversation_participants
+        SET deleted_at = NULL
+        WHERE conversation_id = #{conversationId}
+          AND user_id = #{userId}
+    </update>
+</mapper>

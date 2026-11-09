@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.ContentModerationLogMapper">
+    <resultMap id="moderationMap" type="com.hnist.entity.ContentModerationLog">
+        <id property="id" column="id"/>
+        <result property="targetType" column="target_type"/>
+        <result property="targetId" column="target_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="triggerSource" column="trigger_source"/>
+        <result property="ruleHits" column="rule_hits"/>
+        <result property="targetExcerpt" column="target_excerpt"/>
+        <result property="latencyMs" column="latency_ms"/>
+        <result property="aiDecision" column="ai_decision"/>
+        <result property="riskLevel" column="risk_level"/>
+        <result property="categories" column="categories"/>
+        <result property="imageUrl" column="image_url"/>
+        <result property="imageHash" column="image_hash"/>
+        <result property="evidenceJson" column="evidence_json"/>
+        <result property="confidence" column="confidence"/>
+        <result property="reason" column="reason"/>
+        <result property="modelName" column="model_name"/>
+        <result property="promptVersion" column="prompt_version"/>
+        <result property="reviewerId" column="reviewer_id"/>
+        <result property="reviewStatus" column="review_status"/>
+        <result property="reviewedAt" column="reviewed_at"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO content_moderation_logs (
+            target_type, target_id, user_id, trigger_source, rule_hits,
+            target_excerpt, latency_ms, ai_decision, risk_level,
+            categories, image_url, image_hash, evidence_json, confidence,
+            reason, model_name, prompt_version, review_status
+        ) VALUES (
+            #{targetType}, #{targetId}, #{userId}, #{triggerSource}, #{ruleHits},
+            #{targetExcerpt}, #{latencyMs}, #{aiDecision}, #{riskLevel},
+            #{categories}, #{imageUrl}, #{imageHash}, #{evidenceJson}, #{confidence},
+            #{reason}, #{modelName}, #{promptVersion}, #{reviewStatus}
+        )
+    </insert>
+
+    <select id="selectLatest" resultMap="moderationMap">
+        SELECT id, target_type, target_id, trigger_source, rule_hits, target_excerpt, latency_ms, user_id,
+               ai_decision, risk_level, categories, image_url, image_hash, evidence_json, confidence, reason,
+               model_name, prompt_version, reviewer_id, review_status, reviewed_at, created_at
+        FROM content_moderation_logs
+        WHERE target_type = #{targetType} AND target_id = #{targetId}
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+    </select>
+
+    <update id="updateReviewStatus">
+        UPDATE content_moderation_logs
+        SET reviewer_id = #{reviewerId},
+            review_status = #{reviewStatus},
+            reviewed_at = NOW()
+        WHERE target_type = #{targetType}
+          AND target_id = #{targetId}
+          AND review_status = 'pending'
+    </update>
+</mapper>

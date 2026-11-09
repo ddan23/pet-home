@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.PetMapper">
+    <resultMap id="petMap" type="com.hnist.entity.Pet">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="name" column="name"/>
+        <result property="species" column="species"/>
+        <result property="breed" column="breed"/>
+        <result property="gender" column="gender"/>
+        <result property="color" column="color"/>
+        <result property="birthDate" column="birth_date"/>
+        <result property="neutered" column="neutered"/>
+        <result property="weight" column="weight"/>
+        <result property="photoUrl" column="photo_url"/>
+        <result property="medicalNotes" column="medical_notes"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <select id="selectByUserId" resultMap="petMap">
+        SELECT id, user_id, name, species, breed, gender, color, birth_date, neutered, weight, photo_url,
+               medical_notes, status, created_at, updated_at, deleted_at FROM pets
+        WHERE user_id = #{userId} AND status = 'normal' AND deleted_at IS NULL
+        ORDER BY created_at ASC, id ASC
+    </select>
+
+    <select id="countByUserId" resultType="int">
+        SELECT COUNT(*) FROM pets
+        WHERE user_id = #{userId} AND status = 'normal' AND deleted_at IS NULL
+    </select>
+
+    <select id="selectByIdAndUserId" resultMap="petMap">
+        SELECT id, user_id, name, species, breed, gender, color, birth_date, neutered, weight, photo_url,
+               medical_notes, status, created_at, updated_at, deleted_at FROM pets
+        WHERE id = #{id} AND user_id = #{userId}
+          AND status = 'normal' AND deleted_at IS NULL
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO pets (
+            user_id, name, species, breed, gender, color, birth_date,
+            neutered, weight, photo_url, medical_notes, status
+        ) VALUES (
+            #{userId}, #{name}, #{species}, #{breed}, #{gender}, #{color}, #{birthDate},
+            #{neutered}, #{weight}, #{photoUrl}, #{medicalNotes}, 'normal'
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE pets
+        SET name = #{name},
+            species = #{species},
+            breed = #{breed},
+            gender = #{gender},
+            color = #{color},
+            birth_date = #{birthDate},
+            neutered = #{neutered},
+            weight = #{weight},
+            photo_url = #{photoUrl},
+            medical_notes = #{medicalNotes},
+            updated_at = NOW()
+        WHERE id = #{id}
+          AND user_id = #{userId}
+          AND status = 'normal'
+          AND deleted_at IS NULL
+    </update>
+
+    <update id="deleteByUserId">
+        UPDATE pets SET status = 'deleted', deleted_at = NOW()
+        WHERE user_id = #{userId} AND deleted_at IS NULL
+    </update>
+
+    <update id="deleteByIdAndUserId">
+        UPDATE pets
+        SET status = 'deleted', deleted_at = NOW()
+        WHERE id = #{id} AND user_id = #{userId} AND deleted_at IS NULL
+    </update>
+</mapper>

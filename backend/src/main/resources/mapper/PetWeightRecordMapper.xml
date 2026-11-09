@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.PetWeightRecordMapper">
+    <select id="selectByPetId" resultType="com.hnist.entity.PetWeightRecord">
+        SELECT id, pet_id, weight, recorded_on, note, created_at FROM pet_weight_records
+        WHERE pet_id = #{petId}
+        ORDER BY recorded_on ASC, id ASC
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO pet_weight_records (pet_id, weight, recorded_on, note)
+        VALUES (#{petId}, #{weight}, #{recordedOn}, #{note})
+    </insert>
+
+    <delete id="deleteByPetId">
+        DELETE FROM pet_weight_records WHERE pet_id = #{petId}
+    </delete>
+</mapper>

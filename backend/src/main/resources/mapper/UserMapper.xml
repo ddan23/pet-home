@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.UserMapper">
+    <resultMap id="userMap" type="com.hnist.entity.User">
+        <id property="id" column="id"/>
+        <result property="username" column="username"/>
+        <result property="password" column="password"/>
+        <result property="role" column="role"/>
+        <result property="nickname" column="nickname"/>
+        <result property="phone" column="phone"/>
+        <result property="email" column="email"/>
+        <result property="city" column="city"/>
+        <result property="avatar" column="avatar"/>
+        <result property="status" column="status"/>
+        <result property="addresses" column="addresses"/>
+        <result property="likedPosts" column="liked_posts"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="shopCount" column="shop_count"/>
+        <result property="rating" column="avg_rating"/>
+    </resultMap>
+
+    <select id="selectByUsername" resultMap="userMap">
+        SELECT id, username, password, role, nickname, phone, email, city, avatar,
+               status, addresses, liked_posts, created_at, updated_at
+        FROM users
+        WHERE username = #{username}
+    </select>
+
+    <select id="selectById" resultMap="userMap">
+        SELECT id, username, password, role, nickname, phone, email, city, avatar,
+               status, addresses, liked_posts, created_at, updated_at
+        FROM users
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectByIdForUpdate" resultMap="userMap">
+        SELECT id, username, password, role, nickname, phone, email, city, avatar,
+               status, addresses, liked_posts, created_at, updated_at
+        FROM users
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO users (username, password, role, nickname, phone, email, city, status)
+        VALUES (#{username}, #{password}, #{role}, #{nickname}, #{phone}, #{email}, #{city}, #{status})
+    </insert>
+
+    <update id="updateLikedPosts">
+        UPDATE users SET liked_posts = #{likedPosts} WHERE id = #{userId}
+    </update>
+
+    <!-- ===== 扩展 ===== -->
+    <select id="selectAll" resultMap="userMap">
+        SELECT u.*,
+               (SELECT COUNT(*) FROM shops
+                WHERE owner_id = u.id AND archived_at IS NULL) AS shop_count,
+               (SELECT ROUND(AVG(rating), 1) FROM shops
+                WHERE owner_id = u.id AND rating > 0 AND archived_at IS NULL) AS avg_rating
+        FROM users AS u WHERE 1=1
+        <if test="role != null and role != ''">
+            AND u.role = #{role}
+        </if>
+        <if test="status != null and status != ''">
+            AND u.status = #{status}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (u.username LIKE CONCAT(#{keyword}, '%') OR u.nickname LIKE CONCAT(#{keyword}, '%'))
+        </if>
+        ORDER BY u.created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countAll" resultType="int">
+        SELECT COUNT(*) FROM users WHERE 1=1
+        <if test="role != null and role != ''">
+            AND role = #{role}
+        </if>
+        <if test="status != null and status != ''">
+            AND status = #{status}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (username LIKE CONCAT(#{keyword}, '%') OR nickname LIKE CONCAT(#{keyword}, '%'))
+        </if>
+    </select>
+
+    <select id="countByRoleAndStatus" resultType="int">
+        SELECT COUNT(*) FROM users WHERE 1=1
+        <if test="role != null and role != ''">
+            AND role = #{role}
+        </if>
+        <if test="status != null and status != ''">
+            AND status = #{status}
+        </if>
+    </select>
+
+    <update id="updateStatus">
+        UPDATE users SET status = #{status} WHERE id = #{id}
+    </update>
+
+    <update id="updateProfile">
+        UPDATE users SET nickname = #{nickname}, phone = #{phone}, email = #{email}, city = #{city}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateAddresses">
+        UPDATE users SET addresses = #{addresses} WHERE id = #{userId}
+    </update>
+
+    <update id="updateAvatar">
+        UPDATE users SET avatar = #{avatar} WHERE id = #{userId}
+    </update>
+
+    <update id="updatePassword">
+        UPDATE users SET password = #{password} WHERE id = #{userId}
+    </update>
+
+    <select id="selectNormalMemberUserIds" resultType="int">
+        SELECT id FROM users
+        WHERE status = 'normal'
+          AND role = 'user'
+    </select>
+</mapper>

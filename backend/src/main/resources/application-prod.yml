@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    password: ${DB_PASSWORD}
+  ai:
+    mcp:
+      server:
+        # 生产默认关闭：SSE 传输无自带鉴权，需要对外开放 MCP 时改为 true 并确保下方 app.mcp.security 已启用
+        enabled: false
+
+app:
+  mcp:
+    security:
+      # 生产开启 MCP 端点鉴权：key 由 MCP_API_KEY 环境变量注入，缺配置直接启动失败（无默认值）
+      enabled: true
+      api-key: ${MCP_API_KEY}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    cookie-secure: ${JWT_COOKIE_SECURE:true}

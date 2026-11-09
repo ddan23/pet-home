@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.PetDewormingRecordMapper">
+    <select id="selectByPetId" resultType="com.hnist.entity.PetDewormingRecord">
+        SELECT id, pet_id, product_name, treated_on, next_due_on, note, created_at FROM pet_deworming_records
+        WHERE pet_id = #{petId}
+        ORDER BY treated_on ASC, id ASC
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO pet_deworming_records (
+            pet_id, product_name, treated_on, next_due_on, note
+        ) VALUES (
+            #{petId}, #{productName}, #{treatedOn}, #{nextDueOn}, #{note}
+        )
+    </insert>
+
+    <delete id="deleteByPetId">
+        DELETE FROM pet_deworming_records WHERE pet_id = #{petId}
+    </delete>
+</mapper>

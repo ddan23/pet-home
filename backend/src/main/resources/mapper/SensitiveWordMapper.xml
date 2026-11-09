@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.SensitiveWordMapper">
+    <select id="selectEnabled" resultType="com.hnist.entity.SensitiveWord">
+        SELECT id, word, category, severity, enabled
+        FROM sensitive_words
+        WHERE enabled = 1
+        ORDER BY id
+    </select>
+</mapper>

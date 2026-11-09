@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.CartMapper">
+
+    <resultMap id="cartMap" type="com.hnist.entity.CartItem">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="productId" column="product_id"/>
+        <result property="quantity" column="quantity"/>
+        <result property="checked" column="checked"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="productName" column="product_name"/>
+        <result property="productPrice" column="product_price"/>
+        <result property="productImage" column="product_image"/>
+        <result property="shopName" column="shop_name"/>
+        <result property="shopId" column="shop_id"/>
+        <result property="shopLogo" column="shop_logo"/>
+        <result property="productStatus" column="product_status"/>
+        <result property="available" column="available"/>
+        <result property="unavailableReason" column="unavailable_reason"/>
+    </resultMap>
+
+    <sql id="cartJoins">
+        INNER JOIN products AS p ON c.product_id = p.id
+        LEFT JOIN shops AS s ON p.shop_id = s.id AND s.archived_at IS NULL
+        LEFT JOIN users AS owner ON owner.id = s.owner_id
+    </sql>
+
+    <sql id="productAvailableCondition">
+        p.status = 'on'
+        AND p.product_type = 'goods'
+        AND p.stock &gt; 0
+        AND s.status = 'open'
+        AND s.archived_at IS NULL
+        AND owner.status = 'normal'
+    </sql>
+
+    <sql id="cartColumns">
+        c.id, c.user_id, c.product_id, c.quantity,
+        CASE WHEN <include refid="productAvailableCondition"/>
+            THEN c.checked ELSE 0 END AS checked,
+        c.created_at,
+        p.name AS product_name, p.price AS product_price,
+        p.image_url AS product_image, p.status AS product_status,
+        s.name AS shop_name, s.id AS shop_id, s.logo AS shop_logo,
+        CASE WHEN <include refid="productAvailableCondition"/>
+            THEN 1 ELSE 0 END AS available,
+        CASE
+            WHEN p.status != 'on' THEN '商品已下架'
+            WHEN p.product_type != 'goods' THEN '商品类型不可售'
+            WHEN p.stock IS NULL OR p.stock &lt;= 0 THEN '库存不足'
+            WHEN s.id IS NULL OR s.status != 'open' OR s.archived_at IS NOT NULL
+                THEN '店铺暂停营业'
+            WHEN owner.status != 'normal' THEN '商家账号不可用'
+            ELSE NULL
+        END AS unavailable_reason
+    </sql>
+
+    <select id="selectById" resultMap="cartMap">
+        SELECT <include refid="cartColumns"/>
+        FROM cart_items AS c
+        <include refid="cartJoins"/>
+        WHERE c.id = #{id}
+    </select>
+
+    <!-- 查用户购物车（关联商品信息） -->
+    <select id="selectByUserId" resultMap="cartMap">
+        SELECT <include refid="cartColumns"/>
+        FROM cart_items AS c
+        <include refid="cartJoins"/>
+        WHERE c.user_id = #{userId}
+        ORDER BY s.id, p.status DESC, c.created_at DESC
+    </select>
+
+    <select id="selectByUserAndProduct" resultMap="cartMap">
+        SELECT id, user_id, product_id, quantity, checked, created_at FROM cart_items WHERE user_id = #{userId} AND product_id = #{productId}
+    </select>
+
+    <select id="countQuantityByUserId" resultType="int">
+        SELECT COALESCE(SUM(quantity), 0)
+        FROM cart_items
+        WHERE user_id = #{userId}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO cart_items (user_id, product_id, quantity, checked)
+        VALUES (#{userId}, #{productId}, #{quantity}, #{checked})
+    </insert>
+
+    <update id="updateQuantity">
+        UPDATE cart_items SET quantity = #{quantity} WHERE id = #{id}
+    </update>
+
+    <update id="updateChecked">
+        UPDATE cart_items SET checked = #{checked} WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM cart_items WHERE id = #{id}
+    </delete>
+
+    <delete id="batchDelete">
+        DELETE FROM cart_items WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <update id="updateCheckedByUserId">
+        UPDATE cart_items c
+        INNER JOIN products AS p ON p.id = c.product_id
+        LEFT JOIN shops AS s ON p.shop_id = s.id AND s.archived_at IS NULL
+        LEFT JOIN users AS owner ON owner.id = s.owner_id
+        SET c.checked = CASE
+            WHEN #{checked} = 1 AND <include refid="productAvailableCondition"/> THEN 1
+            ELSE 0
+        END
+        WHERE c.user_id = #{userId}
+    </update>
+
+    <update id="updateCheckedByShop">
+        UPDATE cart_items c
+        INNER JOIN products AS p ON p.id = c.product_id
+        LEFT JOIN shops AS s ON p.shop_id = s.id AND s.archived_at IS NULL
+        LEFT JOIN users AS owner ON owner.id = s.owner_id
+        SET c.checked = CASE
+            WHEN #{checked} = 1 AND <include refid="productAvailableCondition"/> THEN 1
+            ELSE 0
+        END
+        WHERE c.user_id = #{userId} AND p.shop_id = #{shopId}
+    </update>
+
+    <update id="uncheckUnavailableByUserId">
+        UPDATE cart_items c
+        INNER JOIN products AS p ON p.id = c.product_id
+        LEFT JOIN shops AS s ON p.shop_id = s.id AND s.archived_at IS NULL
+        LEFT JOIN users AS owner ON owner.id = s.owner_id
+        SET c.checked = 0
+        WHERE c.user_id = #{userId}
+          AND NOT COALESCE(<include refid="productAvailableCondition"/>, FALSE)
+    </update>
+
+    <update id="updateCheckedByIds">
+        UPDATE cart_items
+        SET checked = #{checked}
+        WHERE user_id = #{userId}
+          AND id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+
+
+</mapper>

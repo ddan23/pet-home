@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    password: ${DB_PASSWORD:1234}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:7467ca7521c6304ee80db45f6c19b1ab2968477fa40aac048678e86b3b24fd5b}
+    cookie-secure: ${JWT_COOKIE_SECURE:false}
+
+logging:
+  level:
+    com.hnist: DEBUG

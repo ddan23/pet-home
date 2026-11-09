@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.KnowledgeMapper">
+    <resultMap id="articleMap" type="com.hnist.entity.KnowledgeArticle">
+        <id property="id" column="id"/>
+        <result property="title" column="title"/>
+        <result property="species" column="species"/>
+        <result property="topic" column="topic"/>
+        <result property="summary" column="summary"/>
+        <result property="sourceTitle" column="source_title"/>
+        <result property="sourceUrl" column="source_url"/>
+        <result property="publisher" column="publisher"/>
+        <result property="publishedOn" column="published_on"/>
+        <result property="reviewedOn" column="reviewed_on"/>
+        <result property="reviewStatus" column="review_status"/>
+        <result property="reviewerId" column="reviewer_id"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="chunkMap" type="com.hnist.entity.KnowledgeChunk">
+        <id property="id" column="id"/>
+        <result property="articleId" column="article_id"/>
+        <result property="title" column="title"/>
+        <result property="species" column="species"/>
+        <result property="topic" column="topic"/>
+        <result property="content" column="content"/>
+        <result property="chunkOrder" column="chunk_order"/>
+        <result property="sourceTitle" column="source_title"/>
+        <result property="sourceUrl" column="source_url"/>
+        <result property="publisher" column="publisher"/>
+        <result property="reviewedOn" column="reviewed_on"/>
+        <result property="relevance" column="relevance"/>
+    </resultMap>
+
+    <select id="searchPublished" resultMap="chunkMap">
+        SELECT kc.id, kc.article_id, kc.content, ka.title, ka.species, ka.topic,
+               ka.source_title, ka.source_url, ka.publisher, ka.reviewed_on,
+               MATCH(kc.content) AGAINST(#{query} IN NATURAL LANGUAGE MODE) AS relevance
+        FROM knowledge_chunks AS kc
+        INNER JOIN knowledge_articles AS ka ON kc.article_id = ka.id
+        WHERE ka.review_status = 'published'
+          AND ka.reviewed_on IS NOT NULL
+          AND (ka.species = 'all' OR ka.species = #{species})
+          AND MATCH(kc.content) AGAINST(#{query} IN NATURAL LANGUAGE MODE) &gt; 0
+        ORDER BY relevance DESC, ka.reviewed_on DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectAll" resultMap="articleMap">
+        SELECT id, title, species, topic, summary, source_title, source_url, publisher, published_on, reviewed_on,
+               review_status, reviewer_id, created_at, updated_at FROM knowledge_articles
+        WHERE 1 = 1
+        <if test="keyword != null and keyword != ''">
+            AND (title LIKE CONCAT(#{keyword}, '%')
+                 OR topic LIKE CONCAT(#{keyword}, '%')
+                 OR publisher LIKE CONCAT(#{keyword}, '%'))
+        </if>
+        <if test="status != null and status != ''">
+            AND review_status = #{status}
+        </if>
+        ORDER BY updated_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countAll" resultType="int">
+        SELECT COUNT(*) FROM knowledge_articles
+        WHERE 1 = 1
+        <if test="keyword != null and keyword != ''">
+            AND (title LIKE CONCAT(#{keyword}, '%')
+                 OR topic LIKE CONCAT(#{keyword}, '%')
+                 OR publisher LIKE CONCAT(#{keyword}, '%'))
+        </if>
+        <if test="status != null and status != ''">
+            AND review_status = #{status}
+        </if>
+    </select>
+
+    <select id="selectById" resultMap="articleMap">
+        SELECT id, title, species, topic, summary, source_title, source_url, publisher, published_on, reviewed_on,
+               review_status, reviewer_id, created_at, updated_at FROM knowledge_articles WHERE id = #{id}
+    </select>
+
+    <select id="selectChunksByArticleId" resultMap="chunkMap">
+        SELECT kc.id, kc.article_id, kc.chunk_order, kc.content, ka.title, ka.species, ka.topic,
+               ka.source_title, ka.source_url, ka.publisher, ka.reviewed_on
+        FROM knowledge_chunks AS kc
+        INNER JOIN knowledge_articles AS ka ON kc.article_id = ka.id
+        WHERE kc.article_id = #{articleId}
+        ORDER BY kc.chunk_order ASC
+    </select>
+
+    <insert id="insertArticle" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO knowledge_articles (
+            title, species, topic, summary, source_title, source_url, publisher,
+            published_on, reviewed_on, review_status, reviewer_id
+        ) VALUES (
+            #{title}, #{species}, #{topic}, #{summary}, #{sourceTitle}, #{sourceUrl},
+            #{publisher}, #{publishedOn}, #{reviewedOn}, #{reviewStatus}, #{reviewerId}
+        )
+    </insert>
+
+    <update id="updateArticle">
+        UPDATE knowledge_articles SET
+            title = #{title}, species = #{species}, topic = #{topic},
+            summary = #{summary}, source_title = #{sourceTitle}, source_url = #{sourceUrl},
+            publisher = #{publisher}, published_on = #{publishedOn},
+            reviewed_on = #{reviewedOn}, review_status = #{reviewStatus},
+            reviewer_id = #{reviewerId}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateReviewStatus">
+        UPDATE knowledge_articles
+        SET review_status = #{reviewStatus},
+            reviewed_on = CASE WHEN #{reviewStatus} = 'published' THEN CURDATE() ELSE reviewed_on END,
+            reviewer_id = #{reviewerId}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteChunks">
+        DELETE FROM knowledge_chunks WHERE article_id = #{articleId}
+    </delete>
+
+    <insert id="insertChunk" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO knowledge_chunks (article_id, chunk_order, content, search_keywords)
+        VALUES (#{articleId}, #{chunkOrder}, #{content}, #{searchKeywords})
+    </insert>
+
+    <delete id="deleteArticle">
+        DELETE FROM knowledge_articles WHERE id = #{id}
+    </delete>
+</mapper>

@@ -1,0 +1,411 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnist.mapper.ProductMapper">
+
+    <resultMap id="productMap" type="com.hnist.entity.Product">
+        <id property="id" column="id"/>
+        <result property="shopId" column="shop_id"/>
+        <result property="productType" column="product_type"/>
+        <result property="category" column="category"/>
+        <result property="categoryId" column="category_id"/>
+        <result property="categoryCode" column="category_code"/>
+        <result property="categoryName" column="category_name"/>
+        <result property="parentCategoryCode" column="parent_category_code"/>
+        <result property="parentCategoryName" column="parent_category_name"/>
+        <result property="medicalCategory" column="medical_category"/>
+        <result property="name" column="name"/>
+        <result property="description" column="description"/>
+        <result property="targetPet" column="target_pet"/>
+        <result property="lifeStage" column="life_stage"/>
+        <result property="healthTags" column="health_tags"/>
+        <result property="price" column="price"/>
+        <result property="stock" column="stock"/>
+        <result property="duration" column="duration"/>
+        <result property="durationMinutes" column="duration_minutes"/>
+        <result property="imageUrl" column="image_url"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="shopName" column="shop_name"/>
+        <result property="shopRating" column="shop_rating"/>
+        <result property="shopBusinessHours" column="shop_business_hours"/>
+        <result property="shopAddress" column="shop_address"/>
+        <result property="shopOwnerId" column="shop_owner_id"/>
+        <result property="shopLogo" column="shop_logo"/>
+    </resultMap>
+
+    <sql id="categoryColumns">
+        pc.category_code AS category_code,
+        pc.category_name AS category_name,
+        parent.category_code AS parent_category_code,
+        parent.category_name AS parent_category_name,
+        CASE
+            WHEN pc.medical_flag = 1 OR COALESCE(parent.medical_flag, 0) = 1 THEN 1
+            ELSE 0
+        END AS medical_category
+    </sql>
+
+    <sql id="categoryJoins">
+        INNER JOIN product_categories AS pc ON pc.id = p.category_id
+        LEFT JOIN product_categories AS parent ON parent.id = pc.parent_id
+    </sql>
+
+    <!-- 用户端：查上架商品列表（关联店铺名，只查状态为open的店铺的on商品） -->
+    <select id="selectForUser" resultMap="productMap">
+        SELECT p.*, <include refid="categoryColumns"/>,
+               s.name AS shop_name, s.rating AS shop_rating, s.logo AS shop_logo
+        FROM products AS p
+        <include refid="categoryJoins"/>
+        INNER JOIN shops AS s ON p.shop_id = s.id
+            AND s.status = 'open' AND s.archived_at IS NULL
+        INNER JOIN users AS owner ON owner.id = s.owner_id AND owner.status = 'normal'
+        WHERE p.status = 'on' AND p.product_type = 'goods'
+        <if test="shopId != null">
+            AND p.shop_id = #{shopId}
+        </if>
+        <if test="categoryFilter != null and categoryFilter != ''">
+            AND (pc.category_code = #{categoryFilter}
+                 OR parent.category_code = #{categoryFilter}
+                 OR pc.category_name = #{categoryFilter}
+                 OR parent.category_name = #{categoryFilter})
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (p.name LIKE CONCAT(#{keyword}, '%')
+                 OR p.description LIKE CONCAT(#{keyword}, '%')
+                 OR s.name LIKE CONCAT(#{keyword}, '%'))
+        </if>
+        ORDER BY p.created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countForUser" resultType="int">
+        SELECT COUNT(*)
+        FROM products AS p
+        INNER JOIN product_categories AS pc ON pc.id = p.category_id
+        LEFT JOIN product_categories AS parent ON parent.id = pc.parent_id
+        INNER JOIN shops AS s ON p.shop_id = s.id
+            AND s.status = 'open' AND s.archived_at IS NULL
+        INNER JOIN users AS owner ON owner.id = s.owner_id AND owner.status = 'normal'
+        WHERE p.status = 'on' AND p.product_type = 'goods'
+        <if test="shopId != null">
+            AND p.shop_id = #{shopId}
+        </if>
+        <if test="categoryFilter != null and categoryFilter != ''">
+            AND (pc.category_code = #{categoryFilter}
+                 OR parent.category_code = #{categoryFilter}
+                 OR pc.category_name = #{categoryFilter}
+                 OR parent.category_name = #{categoryFilter})
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (p.name LIKE CONCAT(#{keyword}, '%')
+                 OR p.description LIKE CONCAT(#{keyword}, '%')
+                 OR s.name LIKE CONCAT(#{keyword}, '%'))
+        </if>
+    </select>
+
+    <select id="selectById" resultMap="productMap">
+        SELECT p.*, <include refid="categoryColumns"/>,
+               s.name AS shop_name, s.rating AS shop_rating, s.logo AS shop_logo,
+               s.business_hours AS shop_business_hours, s.address AS shop_address,
+               s.owner_id AS shop_owner_id
+        FROM products AS p
+        <include refid="categoryJoins"/>
+        LEFT JOIN shops AS s ON p.shop_id = s.id
+        WHERE p.id = #{id}
+    </select>
+
+    <!-- 用户端：只查询营业店铺中的上架商品或服务 -->
+    <select id="selectPublicById" resultMap="productMap">
+        SELECT p.*, <include refid="categoryColumns"/>,
+               s.name AS shop_name, s.rating AS shop_rating, s.logo AS shop_logo,
+               s.business_hours AS shop_business_hours, s.address AS shop_address,
+               s.owner_id AS shop_owner_id
+        FROM products AS p
+        <include refid="categoryJoins"/>
+        INNER JOIN shops AS s ON p.shop_id = s.id
+            AND s.status = 'open' AND s.archived_at IS NULL
+        INNER JOIN users AS owner ON owner.id = s.owner_id AND owner.status = 'normal'
+        WHERE p.id = #{id}
+          AND p.status = 'on'
+          AND p.product_type = #{productType}
+    </select>
+
+    <!-- 商家端：查自己店铺的商品 -->
+    <select id="selectByShopId" resultMap="productMap">
+        SELECT p.*, <include refid="categoryColumns"/>,
+               s.name AS shop_name, s.rating AS shop_rating, s.logo AS shop_logo
+        FROM products AS p
+        <include refid="categoryJoins"/>
+        LEFT JOIN shops AS s ON p.shop_id = s.id
+        WHERE p.shop_id = #{shopId}
+        <if test="keyword != null and keyword != ''">
+            AND p.name LIKE CONCAT(#{keyword}, '%')
+        </if>
+        <if test="categoryFilter != null and categoryFilter != ''">
+            AND (pc.category_code = #{categoryFilter}
+                 OR parent.category_code = #{categoryFilter}
+                 OR pc.category_name = #{categoryFilter}
+                 OR parent.category_name = #{categoryFilter})
+        </if>
+        <if test="status != null and status != ''">
+            AND p.status = #{status}
+        </if>
+        <if test="stockMax != null">
+            AND p.stock &lt;= #{stockMax}
+        </if>
+        <if test="productType != null and productType != ''">
+            AND p.product_type = #{productType}
+        </if>
+        <choose>
+            <when test="stockMax != null">
+                ORDER BY p.stock ASC, p.created_at DESC
+            </when>
+            <otherwise>
+                ORDER BY p.created_at DESC
+            </otherwise>
+        </choose>
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countByShopId" resultType="int">
+        SELECT COUNT(*)
+        FROM products AS p
+        INNER JOIN product_categories AS pc ON pc.id = p.category_id
+        LEFT JOIN product_categories AS parent ON parent.id = pc.parent_id
+        WHERE p.shop_id = #{shopId}
+        <if test="keyword != null and keyword != ''">
+            AND p.name LIKE CONCAT(#{keyword}, '%')
+        </if>
+        <if test="categoryFilter != null and categoryFilter != ''">
+            AND (pc.category_code = #{categoryFilter}
+                 OR parent.category_code = #{categoryFilter}
+                 OR pc.category_name = #{categoryFilter}
+                 OR parent.category_name = #{categoryFilter})
+        </if>
+        <if test="status != null and status != ''">
+            AND p.status = #{status}
+        </if>
+        <if test="stockMax != null">
+            AND p.stock &lt;= #{stockMax}
+        </if>
+        <if test="productType != null and productType != ''">
+            AND p.product_type = #{productType}
+        </if>
+    </select>
+
+    <select id="selectServicesByOwner" resultMap="productMap">
+        SELECT p.*, <include refid="categoryColumns"/>,
+               s.name AS shop_name, s.rating AS shop_rating, s.logo AS shop_logo
+        FROM products AS p
+        <include refid="categoryJoins"/>
+        INNER JOIN shops AS s ON p.shop_id = s.id
+        WHERE s.owner_id = #{ownerId}
+          AND s.archived_at IS NULL
+          AND s.status = 'open'
+          AND p.product_type = 'service'
+        <if test="keyword != null and keyword != ''">
+            AND p.name LIKE CONCAT(#{keyword}, '%')
+        </if>
+        <if test="categoryFilter != null and categoryFilter != ''">
+            AND (pc.category_code = #{categoryFilter}
+                 OR parent.category_code = #{categoryFilter}
+                 OR pc.category_name = #{categoryFilter}
+                 OR parent.category_name = #{categoryFilter})
+        </if>
+        <if test="status != null and status != ''">
+            AND p.status = #{status}
+        </if>
+        ORDER BY p.created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countServicesByOwner" resultType="int">
+        SELECT COUNT(*)
+        FROM products AS p
+        INNER JOIN product_categories AS pc ON pc.id = p.category_id
+        LEFT JOIN product_categories AS parent ON parent.id = pc.parent_id
+        INNER JOIN shops AS s ON p.shop_id = s.id
+        WHERE s.owner_id = #{ownerId}
+          AND s.archived_at IS NULL
+          AND s.status = 'open'
+          AND p.product_type = 'service'
+        <if test="keyword != null and keyword != ''">
+            AND p.name LIKE CONCAT(#{keyword}, '%')
+        </if>
+        <if test="categoryFilter != null and categoryFilter != ''">
+            AND (pc.category_code = #{categoryFilter}
+                 OR parent.category_code = #{categoryFilter}
+                 OR pc.category_name = #{categoryFilter}
+                 OR parent.category_name = #{categoryFilter})
+        </if>
+        <if test="status != null and status != ''">
+            AND p.status = #{status}
+        </if>
+    </select>
+
+    <!-- 系统端：查全部商品 -->
+    <select id="selectAllForAdmin" resultMap="productMap">
+        SELECT p.*, <include refid="categoryColumns"/>,
+               s.name AS shop_name, s.rating AS shop_rating, s.logo AS shop_logo
+        FROM products AS p
+        <include refid="categoryJoins"/>
+        LEFT JOIN shops AS s ON p.shop_id = s.id
+        WHERE 1=1
+        <if test="keyword != null and keyword != ''">
+            AND p.name LIKE CONCAT(#{keyword}, '%')
+        </if>
+        <if test="status != null and status != ''">
+            AND p.status = #{status}
+        </if>
+        <if test="productType != null and productType != ''">
+            AND p.product_type = #{productType}
+        </if>
+        ORDER BY p.created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countAllForAdmin" resultType="int">
+        SELECT COUNT(*)
+        FROM products AS p
+        INNER JOIN product_categories AS pc ON pc.id = p.category_id
+        LEFT JOIN product_categories AS parent ON parent.id = pc.parent_id
+        WHERE 1=1
+        <if test="keyword != null and keyword != ''">
+            AND p.name LIKE CONCAT(#{keyword}, '%')
+        </if>
+        <if test="status != null and status != ''">
+            AND p.status = #{status}
+        </if>
+        <if test="productType != null and productType != ''">
+            AND p.product_type = #{productType}
+        </if>
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO products (
+            shop_id, product_type, category_id, category, name, description,
+            target_pet, life_stage, health_tags, price, stock, duration,
+            duration_minutes, image_url, status
+        ) VALUES (
+            #{shopId}, #{productType}, #{categoryId}, #{category}, #{name},
+            #{description}, #{targetPet}, #{lifeStage}, #{healthTags},
+            #{price}, #{stock}, #{duration}, #{durationMinutes}, #{imageUrl}, #{status}
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE products SET
+            category = #{category},
+            category_id = #{categoryId},
+            name = #{name},
+            description = #{description},
+            target_pet = #{targetPet},
+            life_stage = #{lifeStage},
+            health_tags = #{healthTags},
+            price = #{price},
+            stock = #{stock},
+            duration = #{duration},
+            duration_minutes = #{durationMinutes},
+            image_url = #{imageUrl}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM products WHERE id = #{id}
+    </delete>
+
+    <select id="existsScheduleByServiceId" resultType="boolean">
+        SELECT EXISTS(SELECT 1 FROM appointment_schedules WHERE service_id = #{serviceId})
+    </select>
+
+    <select id="existsSlotByServiceId" resultType="boolean">
+        SELECT EXISTS(SELECT 1 FROM appointment_slots WHERE service_id = #{serviceId})
+    </select>
+
+    <select id="existsOrderRefByServiceId" resultType="boolean">
+        SELECT EXISTS(
+            SELECT 1 FROM order_appointment_slots AS oas
+            JOIN appointment_slots AS s ON s.id = oas.slot_id
+            WHERE s.service_id = #{serviceId}
+        )
+    </select>
+
+    <delete id="deleteSlotsByServiceId">
+        DELETE FROM appointment_slots WHERE service_id = #{serviceId}
+    </delete>
+
+    <update id="updateStatus">
+        UPDATE products SET status = #{status} WHERE id = #{id}
+    </update>
+
+    <update id="reserveStock">
+        UPDATE products
+        SET status = CASE WHEN stock - #{quantity} &lt;= 0 THEN 'off' ELSE status END,
+            stock = stock - #{quantity}
+        WHERE id = #{productId}
+          AND product_type = 'goods'
+          AND status = 'on'
+          AND stock &gt;= #{quantity}
+    </update>
+
+    <update id="releaseStock">
+        UPDATE products
+        SET stock = stock + #{quantity}
+        WHERE id = #{productId}
+          AND product_type = 'goods'
+    </update>
+
+    <!-- 用户端：查服务列表 -->
+    <select id="selectServicesForUser" resultMap="productMap">
+        SELECT p.*, <include refid="categoryColumns"/>,
+               s.name AS shop_name, s.rating AS shop_rating, s.logo AS shop_logo
+        FROM products AS p
+        <include refid="categoryJoins"/>
+        INNER JOIN shops AS s ON p.shop_id = s.id
+            AND s.status = 'open' AND s.archived_at IS NULL
+        INNER JOIN users AS owner ON owner.id = s.owner_id AND owner.status = 'normal'
+        WHERE p.status = 'on' AND p.product_type = 'service'
+        <if test="shopId != null">
+            AND p.shop_id = #{shopId}
+        </if>
+        <if test="categoryFilter != null and categoryFilter != ''">
+            AND (pc.category_code = #{categoryFilter}
+                 OR parent.category_code = #{categoryFilter}
+                 OR pc.category_name = #{categoryFilter}
+                 OR parent.category_name = #{categoryFilter})
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (p.name LIKE CONCAT(#{keyword}, '%')
+                 OR p.description LIKE CONCAT(#{keyword}, '%')
+                 OR s.name LIKE CONCAT(#{keyword}, '%'))
+        </if>
+        ORDER BY p.created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countServicesForUser" resultType="int">
+        SELECT COUNT(*)
+        FROM products AS p
+        INNER JOIN product_categories AS pc ON pc.id = p.category_id
+        LEFT JOIN product_categories AS parent ON parent.id = pc.parent_id
+        INNER JOIN shops AS s ON p.shop_id = s.id
+            AND s.status = 'open' AND s.archived_at IS NULL
+        INNER JOIN users AS owner ON owner.id = s.owner_id AND owner.status = 'normal'
+        WHERE p.status = 'on' AND p.product_type = 'service'
+        <if test="shopId != null">
+            AND p.shop_id = #{shopId}
+        </if>
+        <if test="categoryFilter != null and categoryFilter != ''">
+            AND (pc.category_code = #{categoryFilter}
+                 OR parent.category_code = #{categoryFilter}
+                 OR pc.category_name = #{categoryFilter}
+                 OR parent.category_name = #{categoryFilter})
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (p.name LIKE CONCAT(#{keyword}, '%')
+                 OR p.description LIKE CONCAT(#{keyword}, '%')
+                 OR s.name LIKE CONCAT(#{keyword}, '%'))
+        </if>
+    </select>
+
+</mapper>
